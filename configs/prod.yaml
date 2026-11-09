@@ -1,0 +1,19 @@
+# Cấu hình chạy toàn bộ dữ liệu MovieLens 32M (100% ~ 32M ratings)
+environment: "prod"
+
+spark:
+  app_name: "MovieLens32M-RecSys-Prod"
+  master: "local[*]"
+  driver_memory: "8g"
+  executor_memory: "8g"
+  shuffle_partitions: 64
+  serializer: "org.apache.spark.serializer.KryoSerializer"
+  adaptive_enabled: true
+
+data:
+  sample_fraction: 1.0
+
+als:
+  rank: 20
+  max_iter: 10
+  reg_param: 0.1

@@ -1,0 +1,39 @@
+project:
+  name: "movielens-32m-recsys"
+  seed: 42
+
+dataset:
+  url: "https://files.grouplens.org/datasets/movielens/ml-32m.zip"
+  zip_name: "ml-32m.zip"
+  extracted_folder: "ml-32m"
+
+paths:
+  raw_dir: "data/raw"
+  lake_dir: "data/lake"
+  ratings_parquet: "data/lake/ratings"
+  movies_parquet: "data/lake/movies"
+  tags_parquet: "data/lake/tags"
+  output_dir: "data/output"
+  topn_parquet: "data/output/topn_recommendations.parquet"
+  metrics_json: "data/output/metrics.json"
+  benchmark_csv: "data/output/benchmark_results.csv"
+  checkpoint_dir: "data/checkpoints"
+  figures_dir: "reports/figures"
+
+etl:
+  compression: "snappy"
+  partition_col: "year"
+
+als:
+  user_col: "user_id"
+  item_col: "movie_id"
+  rating_col: "rating"
+  cold_start_strategy: "drop"
+  nonnegative: true
+  checkpoint_interval: 5
+  top_n: 20
+
+evaluation:
+  k_values: [10, 20]
+  train_ratio: 0.8
+  test_ratio: 0.2

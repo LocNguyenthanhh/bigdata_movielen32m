@@ -1,0 +1,35 @@
+# Local data directories (do not commit dataset or outputs)
+data/raw/*
+!data/raw/.gitkeep
+data/lake/*
+!data/lake/.gitkeep
+data/output/*
+!data/output/.gitkeep
+data/checkpoints/
+
+# Spark & Java artifacts
+spark-warehouse/
+metastore_db/
+derby.log
+checkpoints/
+
+# Python cache & virtual environments
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+
+# Environment & IDE
+.env
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db

@@ -1,0 +1,19 @@
+# Cấu hình chạy thử nghiệm nhanh (Sample 5% ~ 1.6M ratings)
+environment: "dev"
+
+spark:
+  app_name: "MovieLens32M-RecSys-Dev"
+  master: "local[*]"
+  driver_memory: "4g"
+  executor_memory: "4g"
+  shuffle_partitions: 16
+  serializer: "org.apache.spark.serializer.KryoSerializer"
+  adaptive_enabled: true
+
+data:
+  sample_fraction: 0.05
+
+als:
+  rank: 10
+  max_iter: 5
+  reg_param: 0.1
