@@ -1,0 +1,48 @@
+movielens-recsys/
+├── README.md                          # Hướng dẫn cài đặt & 1-click chạy
+├── requirements.txt                   # pyspark, pandas, matplotlib, seaborn, pyyaml, streamlit (tuỳ chọn)
+├── .gitignore                         # Bỏ qua /data, .env, checkpoint, __pycache__
+│
+├── configs/
+│   ├── base.yaml                      # Cấu hình chung (đường dẫn, schema, seed)
+│   ├── dev.yaml                       # Cấu hình chạy nhanh test logic (sample 5% ~ 1.6M dòng)
+│   └── prod.yaml                      # Cấu hình chạy full 32M dòng (bật Kryo, memory tuning)
+│
+├── data/                              # Dữ liệu cục bộ (không commit Git)
+│   ├── raw/                           # ratings.csv, movies.csv, tags.csv (~1GB)
+│   ├── lake/                          # Parquet partition theo năm (ratings/, movies/)
+│   └── output/                        # topn_recommendations.parquet, metrics.json, benchmark_results.csv
+│
+├── src/
+│   ├── __init__.py
+│   ├── common/                        # Module dùng chung
+│   │   ├── config.py                  # Đọc YAML configs + tham số môi trường
+│   │   └── spark_session.py           # Khởi tạo SparkSession tối ưu (chế độ local[*], cấp RAM, KryoSerializer)
+│   │
+│   ├── etl/                           # ① PHẦN VIỆC CỦA QUANG: NẠP & TIỀN XỬ LÝ DỮ LIỆU LỚN
+│   │   ├── download_data.py           # Script tự động tải và giải nén MovieLens 32M
+│   │   └── csv_to_parquet.py          # PySpark ETL: Đọc CSV -> Chuẩn hóa kiểu -> Ghi Parquet nén Snappy
+│   │
+│   ├── ml/                            # ② PHẦN VIỆC CỦA TÂM: MÔ HÌNH HÓA PHÂN TÁN (SPARK MLLIB)
+│   │   ├── train_als.py               # Huấn luyện Spark ALS (phân rã ma trận người dùng - phim)
+│   │   ├── evaluate_model.py          # Đánh giá thuật toán: RMSE, Precision@K, NDCG@K, Cold-start analysis
+│   │   └── generate_topn.py           # Sinh Top-20 phim gợi ý cho từng user (khử phim đã xem)
+│   │
+│   ├── benchmarks/                    # ③ PHẦN VIỆC CỦA LỘC: ĐÁNH GIÁ HIỆU NĂNG HỆ THỐNG (HPC LAB FOCUS)
+│   │   ├── benchmark_speedup.py       # Đo thời gian khi đổi số Cores (1, 2, 4 cores -> Định luật Amdahl)
+│   │   ├── benchmark_scaling.py       # Đo thời gian ETL & Train qua các mốc dữ liệu: 5%, 20%, 50%, 100%
+│   │   └── plot_benchmarks.py         # Tự động xuất biểu đồ Speedup & Scalability ra file ảnh cho Báo cáo
+│   │
+│   └── demo/                          # ③ PHẦN VIỆC CỦA LỘC: DEMO TỐI GIẢN (THAY THẾ WEB UI CỒNG KỀNH)
+│       └── app_demo.py                # Tra cứu gợi ý theo User ID (giao diện Streamlit 40 dòng hoặc CLI)
+│
+├── notebooks/
+│   ├── 01_eda_movielens.ipynb         # (Quang) Phân tích khám phá: Phân bố ratings, Long-tail, Độ thưa
+│   └── 02_clustering_bonus.ipynb      # (Tâm) Điểm cộng: K-Means trên ALS itemFactors (phân cụm phim)
+│
+├── reports/                           # TÀI LIỆU NỘP MÔN HỌC (LỘC CHỦ TRÌ)
+│   ├── slide_intro_3pages.pdf         # Nộp deadline 08/11/2026 (Topic, Data source, Problems)
+│   ├── final_report.docx/.pdf         # Báo cáo cuối kỳ nộp 12/12/2026
+│   └── figures/                       # Biểu đồ tự động lưu vào đây để chèn vào báo cáo
+│
+└── run_pipeline.py                    # Script chạy toàn bộ pipeline: ETL -> Train -> Eval -> TopN -> Benchmark
