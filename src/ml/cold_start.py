@@ -26,6 +26,11 @@ from pyspark.sql.window import Window
 from src.common.config import PROJECT_ROOT, load_config
 
 
+def votes_quantile(movie_stats: DataFrame, quantile: float) -> float:
+    """Phân vị `quantile` của số lượt đánh giá mỗi phim (cột `num_ratings`), tối thiểu 1."""
+    return max(float(movie_stats.approxQuantile("num_ratings", [quantile], 0.01)[0]), 1.0)
+
+
 def compute_bayesian_popularity(ratings_df: DataFrame, env: str = "dev", save: bool = True) -> DataFrame:
     """Tính bảng xếp hạng phim theo Bayesian Popularity và (tuỳ chọn) lưu ra Parquet.
 
@@ -42,8 +47,7 @@ def compute_bayesian_popularity(ratings_df: DataFrame, env: str = "dev", save: b
     ).cache()
 
     global_mean = ratings_df.agg(F.avg("rating")).first()[0]
-    min_votes = float(movie_stats.approxQuantile("num_ratings", [quantile], 0.01)[0])
-    min_votes = max(min_votes, 1.0)
+    min_votes = votes_quantile(movie_stats, quantile)
 
     v = F.col("num_ratings").cast("double")
     m = F.lit(min_votes)

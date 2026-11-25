@@ -5,7 +5,11 @@ Quy ước đánh giá:
       (coldStartStrategy = "drop").
     - Precision@K / NDCG@K: với mỗi user trong test, tập "phim liên quan" là các phim user
       chấm >= `evaluation.relevance_threshold` trong test. Danh sách gợi ý là Top-K của ALS
-      sau khi loại các phim user đã xem trong train (left_anti).
+      sau khi loại các phim user đã xem trong train (left_anti). Có thể lấy mẫu cố định
+      `evaluation.ranking_user_sample` user để giới hạn chi phí.
+    - ALS có lọc: chỉ giữ ứng viên là phim có số lượt đánh giá trên train >= phân vị
+      `als.candidate_min_ratings_quantile` (ALS tối ưu RMSE hay đẩy phim rất ít lượt đánh giá
+      lên đầu danh sách).
     - Baseline Bayesian Popularity: cùng giao thức trên nhưng mọi user nhận cùng một bảng
       phim phổ biến → cho thấy mức cải thiện nhờ cá nhân hóa của ALS.
     - Cold-start: thống kê tỷ lệ dòng test có user / movie chưa xuất hiện trong train, và RMSE
@@ -24,7 +28,7 @@ from pyspark.sql import functions as F
 from pyspark.sql.window import Window
 
 from src.common.config import PROJECT_ROOT, load_config
-from src.ml.cold_start import compute_bayesian_popularity
+from src.ml.cold_start import compute_bayesian_popularity, votes_quantile
 
 
 def _rmse(df: DataFrame, label_col: str, prediction_col: str) -> Optional[float]:
@@ -186,16 +190,47 @@ def evaluate_als_model(
             test_df.filter(F.col("rating") >= threshold)
             .groupBy("user_id")
             .agg(F.collect_set(F.col("movie_id").cast("double")).alias("relevant"))
-            .cache()
         )
+        # Lấy mẫu user cố định (seed) để giới hạn chi phí khi phải lấy nhiều ứng viên
+        user_sample = int(eval_cfg.get("ranking_user_sample", 0))
+        if user_sample > 0:
+            n_rel = relevant_df.count()
+            if n_rel > user_sample:
+                relevant_df = relevant_df.sample(False, user_sample / n_rel, seed=int(cfg["project"]["seed"]))
+        relevant_df = relevant_df.cache()
         eval_users = relevant_df.select("user_id")
+        metrics["ranking_protocol"] = {
+            "relevance_threshold": threshold,
+            "user_sample": user_sample,
+            "eval_users": relevant_df.count(),
+        }
 
-        als_candidates = model.recommendForUserSubset(eval_users, n_candidates).select(
-            "user_id", F.explode("recommendations").alias("rec")
-        ).select("user_id", F.col("rec.movie_id").alias("movie_id"), F.col("rec.rating").alias("score"))
+        # Ứng viên ALS: lấy đủ nhiều để còn dùng được sau khi lọc
+        min_q = float(cfg["als"].get("candidate_min_ratings_quantile", 0.0))
+        filtered_cands = max_k + int(eval_cfg.get("filtered_candidates", 1000))
+        n_fetch = filtered_cands if min_q > 0 else n_candidates
+        als_all = model.recommendForUserSubset(eval_users, n_fetch).select(
+            "user_id", F.posexplode("recommendations").alias("pos", "rec")
+        ).select("user_id", "pos", F.col("rec.movie_id").alias("movie_id"),
+                 F.col("rec.rating").alias("score")).cache()
+
+        # 2a) ALS thô: chỉ dùng n_candidates ứng viên đầu, như generate_topn khi không lọc
+        als_candidates = als_all.filter(F.col("pos") < n_candidates).drop("pos")
         als_ranking = _ranking_metrics(_topk_lists(als_candidates, train_df, max_k), relevant_df, k_values)
         metrics["als_ranking"] = als_ranking
         print(f"[EVAL] ALS ranking: {als_ranking}")
+
+        # 2b) ALS chỉ gợi ý phim có đủ lượt đánh giá (>= phân vị min_q trên train)
+        if min_q > 0:
+            min_votes = votes_quantile(popularity_df, min_q)
+            eligible = popularity_df.filter(F.col("num_ratings") >= min_votes).select("movie_id")
+            filt = als_all.drop("pos").join(F.broadcast(eligible), "movie_id")
+            filt_ranking = _ranking_metrics(_topk_lists(filt, train_df, max_k), relevant_df, k_values)
+            filt_ranking["min_item_ratings"] = min_votes
+            filt_ranking["eligible_items"] = eligible.count()
+            metrics["als_filtered_ranking"] = filt_ranking
+            print(f"[EVAL] ALS (phim >= {min_votes:.0f} lượt đánh giá) ranking: {filt_ranking}")
+        als_all.unpersist()
 
         # 3) Baseline Bayesian Popularity (không cá nhân hóa)
         top_popular = popularity_df.orderBy(F.col("bayes_score").desc()).limit(n_candidates).select(

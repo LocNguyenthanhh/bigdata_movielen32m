@@ -140,7 +140,7 @@ bigdata_movielen32m/
   - $WR = \frac{v}{v+m} R + \frac{m}{v+m} C$ với $v$ = số lượt đánh giá của phim, $R$ = điểm trung bình của phim, $C$ = điểm trung bình toàn cục, $m$ = phân vị `cold_start.min_votes_quantile` (mặc định 0.90) của số lượt đánh giá.
 * **`data/output/metrics.json`**:
   - Siêu tham số (`rank`, `reg_param`, `max_iter`), `rmse`, `train_time_sec`.
-  - `als_ranking` / `popularity_baseline_ranking`: `precision@K`, `ndcg@K` (K = 10, 20) — phim "liên quan" là phim user chấm $\ge 4.0$ trong tập test; gợi ý đã loại phim đã xem trong train.
+  - `als_ranking` (ALS thô) / `als_filtered_ranking` (ALS chỉ gợi ý phim có số lượt đánh giá ≥ phân vị `als.candidate_min_ratings_quantile`) / `popularity_baseline_ranking`: `precision@K`, `ndcg@K` (K = 10, 20) — phim "liên quan" là phim user chấm $\ge 4.0$ trong tập test; gợi ý đã loại phim đã xem trong train; tính trên mẫu cố định `evaluation.ranking_user_sample` user (`ranking_protocol`).
   - `cold_start`: tỷ lệ dòng test có user/movie mới, số user mới, RMSE của gợi ý dự phòng Bayes so với trung bình toàn cục.
 * **`data/output/tuning_results.csv`** *(khi chạy `--with-tuning`)*:
   - `rank`, `reg_param`, `max_iter`, `val_rmse`, `train_time_sec` cho từng cấu hình grid search.

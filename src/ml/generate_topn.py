@@ -9,6 +9,7 @@ from pyspark.sql import functions as F
 from pyspark.sql.window import Window
 
 from src.common.config import PROJECT_ROOT, load_config
+from src.ml.cold_start import votes_quantile
 
 
 def generate_topn_recommendations(
@@ -22,10 +23,12 @@ def generate_topn_recommendations(
     """
     cfg = load_config(env)
     top_n = int(cfg["als"].get("top_n", 20))
-    n_candidates = top_n + int(cfg["evaluation"].get("ranking_candidates", 100))
+    min_q = float(cfg["als"].get("candidate_min_ratings_quantile", 0.0))
+    extra = cfg["evaluation"].get("filtered_candidates" if min_q > 0 else "ranking_candidates", 100)
+    n_candidates = top_n + int(extra)
     output_path = str(PROJECT_ROOT / cfg["paths"]["topn_parquet"])
 
-    # Lấy dư ứng viên vì một phần sẽ bị loại do user đã xem
+    # Lấy dư ứng viên vì một phần sẽ bị loại do user đã xem (và do lọc phim ít lượt đánh giá)
     raw_recs = model.recommendForAllUsers(n_candidates)
 
     exploded_recs = raw_recs.select(
@@ -36,6 +39,14 @@ def generate_topn_recommendations(
         F.col("rec.movie_id").alias("movie_id"),
         F.col("rec.rating").alias("score"),
     )
+
+    # Chỉ gợi ý phim có đủ lượt đánh giá (ALS hay đẩy phim rất ít dữ liệu lên đầu)
+    if min_q > 0:
+        movie_stats = ratings_df.groupBy("movie_id").agg(F.count("*").alias("num_ratings"))
+        min_votes = votes_quantile(movie_stats, min_q)
+        eligible = movie_stats.filter(F.col("num_ratings") >= min_votes).select("movie_id")
+        exploded_recs = exploded_recs.join(F.broadcast(eligible), "movie_id")
+        print(f"[TOP-N] Chỉ gợi ý phim có >= {min_votes:.0f} lượt đánh giá")
 
     # Khử các bộ phim người dùng đã xem (left_anti join)
     watched_df = ratings_df.select("user_id", "movie_id").distinct()
