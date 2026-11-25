@@ -16,6 +16,9 @@ paths:
   output_dir: "data/output"
   topn_parquet: "data/output/topn_recommendations.parquet"
   popular_parquet: "data/output/popular_movies.parquet"
+  clusters_parquet: "data/output/movie_clusters.parquet"
+  als_model: "data/output/als_model"
+  tuning_csv: "data/output/tuning_results.csv"
   metrics_json: "data/output/metrics.json"
   benchmark_csv: "data/output/benchmark_results.csv"
   checkpoint_dir: "data/checkpoints"
@@ -39,7 +42,23 @@ cold_start:
   # m = phân vị số lượt đánh giá mỗi phim, dùng làm prior
   min_votes_quantile: 0.90
 
+tuning:
+  # Grid search siêu tham số ALS (đánh giá RMSE trên validation tách từ train)
+  ranks: [10, 20, 50]
+  reg_params: [0.01, 0.1]
+  validation_ratio: 0.1
+
+clustering:
+  # (Bonus) K-Means trên ALS itemFactors
+  k: 10
+  k_values: [5, 8, 10, 12, 15]
+  min_item_ratings: 20
+
 evaluation:
   k_values: [10, 20]
   train_ratio: 0.8
   test_ratio: 0.2
+  # Phim được coi là "liên quan" khi user chấm >= ngưỡng này trong tập test
+  relevance_threshold: 4.0
+  # Số ứng viên lấy dư (ngoài K) trước khi loại phim đã xem
+  ranking_candidates: 100
