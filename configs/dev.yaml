@@ -17,3 +17,7 @@ als:
   rank: 10
   max_iter: 5
   reg_param: 0.1
+
+tuning:
+  ranks: [10, 20]
+  reg_params: [0.01, 0.1]

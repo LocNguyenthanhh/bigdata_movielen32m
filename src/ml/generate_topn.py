@@ -16,13 +16,17 @@ def generate_topn_recommendations(
     ratings_df: DataFrame,
     env: str = "dev",
 ) -> DataFrame:
-    """Sinh bảng gợi ý Top-N phim chưa xem cho mỗi user và lưu ra Parquet."""
+    """Sinh bảng gợi ý Top-N phim chưa xem cho mỗi user và lưu ra Parquet.
+
+    Output: (user_id, movie_id, score, rank) theo Data Contract.
+    """
     cfg = load_config(env)
     top_n = int(cfg["als"].get("top_n", 20))
+    n_candidates = top_n + int(cfg["evaluation"].get("ranking_candidates", 100))
     output_path = str(PROJECT_ROOT / cfg["paths"]["topn_parquet"])
 
-    # Lấy nhiều hơn top_n một chút trước khi lọc các phim đã xem
-    raw_recs = model.recommendForAllUsers(top_n * 2)
+    # Lấy dư ứng viên vì một phần sẽ bị loại do user đã xem
+    raw_recs = model.recommendForAllUsers(n_candidates)
 
     exploded_recs = raw_recs.select(
         F.col("user_id"),
@@ -37,12 +41,26 @@ def generate_topn_recommendations(
     watched_df = ratings_df.select("user_id", "movie_id").distinct()
     unwatched_recs = exploded_recs.join(watched_df, on=["user_id", "movie_id"], how="left_anti")
 
-    window_spec = Window.partitionBy("user_id").orderBy(F.col("score").desc())
+    window_spec = Window.partitionBy("user_id").orderBy(F.col("score").desc(), F.col("movie_id"))
     topn_df = (
         unwatched_recs.withColumn("rank", F.row_number().over(window_spec))
         .filter(F.col("rank") <= top_n)
+        .select("user_id", "movie_id", F.col("score").cast("float").alias("score"), "rank")
     )
 
     topn_df.write.mode("overwrite").parquet(output_path)
     print(f"[TOP-N] Đã lưu Top-{top_n} gợi ý tại {output_path}")
     return topn_df
+
+
+if __name__ == "__main__":
+    import argparse
+
+    from src.ml.train_als import load_als_model, load_and_split_ratings
+
+    parser = argparse.ArgumentParser(description="Sinh Top-N gợi ý từ mô hình ALS đã lưu")
+    parser.add_argument("--env", default="dev", choices=["dev", "prod"])
+    args = parser.parse_args()
+
+    all_ratings, _, _ = load_and_split_ratings(args.env)
+    generate_topn_recommendations(load_als_model(args.env), all_ratings, args.env)

@@ -95,10 +95,11 @@ bigdata_movielen32m/
 │   │   └── csv_to_parquet.py          # PySpark ETL: Đọc CSV -> Chuẩn hóa kiểu -> Ghi Parquet nén Snappy
 │   │
 │   ├── ml/                            # ② PHẦN VIỆC CỦA TÂM: MÔ HÌNH HÓA PHÂN TÁN (SPARK MLLIB)
-│   │   ├── train_als.py               # Huấn luyện Spark ALS (phân rã ma trận User-Item)
-│   │   ├── evaluate_model.py          # Đánh giá thuật toán: RMSE, Precision@K, NDCG@K, Cold-start analysis
+│   │   ├── train_als.py               # Huấn luyện Spark ALS + Checkpointing, grid search rank x regParam, lưu/nạp mô hình
+│   │   ├── evaluate_model.py          # Đánh giá: RMSE, Precision@K, NDCG@K, so với baseline Popularity, Cold-start analysis
 │   │   ├── generate_topn.py           # Sinh Top-20 phim gợi ý cho từng user (khử phim đã xem bằng left_anti)
-│   │   └── cold_start.py              # Cold-start: xếp hạng phim theo Bayesian Popularity cho user mới
+│   │   ├── cold_start.py              # Cold-start: xếp hạng phim theo Bayesian Popularity cho user mới
+│   │   └── clustering.py              # (Bonus) K-Means trên ALS itemFactors, diễn giải cụm theo thể loại
 │   │
 │   ├── benchmarks/                    # ③ PHẦN VIỆC CỦA LỘC: ĐÁNH GIÁ HIỆU NĂNG HỆ THỐNG (HPC LAB FOCUS)
 │   │   ├── benchmark_speedup.py       # Đo thời gian khi đổi số Cores (1, 2, 4 cores -> Định luật Amdahl)
@@ -138,7 +139,14 @@ bigdata_movielen32m/
   - `movie_id` (`int`), `num_ratings` (`long`), `avg_rating` (`double`), `bayes_score` (`double`), `rank` (`int`).
   - $WR = \frac{v}{v+m} R + \frac{m}{v+m} C$ với $v$ = số lượt đánh giá của phim, $R$ = điểm trung bình của phim, $C$ = điểm trung bình toàn cục, $m$ = phân vị `cold_start.min_votes_quantile` (mặc định 0.90) của số lượt đánh giá.
 * **`data/output/metrics.json`**:
-  - Lưu siêu tham số, `rmse`, và `train_time_sec`.
+  - Siêu tham số (`rank`, `reg_param`, `max_iter`), `rmse`, `train_time_sec`.
+  - `als_ranking` / `popularity_baseline_ranking`: `precision@K`, `ndcg@K` (K = 10, 20) — phim "liên quan" là phim user chấm $\ge 4.0$ trong tập test; gợi ý đã loại phim đã xem trong train.
+  - `cold_start`: tỷ lệ dòng test có user/movie mới, số user mới, RMSE của gợi ý dự phòng Bayes so với trung bình toàn cục.
+* **`data/output/tuning_results.csv`** *(khi chạy `--with-tuning`)*:
+  - `rank`, `reg_param`, `max_iter`, `val_rmse`, `train_time_sec` cho từng cấu hình grid search.
+* **`data/output/als_model/`**: mô hình ALS đã huấn luyện (dùng cho phân cụm & tái sinh Top-N).
+* **`data/output/movie_clusters.parquet`** *(Bonus)*:
+  - `movie_id` (`int`), `cluster` (`int`).
 * **`data/output/benchmark_results.csv`**:
   - Lưu `benchmark_type`, `cores`, `sample_fraction`, `als_train_sec`, `total_sec`, `speedup`, `efficiency`.
 
@@ -174,6 +182,9 @@ python run_pipeline.py --env prod --with-benchmark
 
 # 3. Nếu đã tải và chạy ETL trước đó, có thể bỏ qua để tiết kiệm thời gian:
 python run_pipeline.py --env dev --skip-download --skip-etl --with-benchmark
+
+# 4. Thêm tinh chỉnh siêu tham số ALS (grid rank x regParam) và phân cụm K-Means (bonus):
+python run_pipeline.py --env dev --skip-download --skip-etl --with-tuning --with-clustering
 ```
 
 ### 5.4. Chạy từng Module độc lập (Theo phân công)
@@ -182,8 +193,13 @@ python run_pipeline.py --env dev --skip-download --skip-etl --with-benchmark
 python -m src.etl.download_data
 python -m src.etl.csv_to_parquet
 
-# [Tâm] Huấn luyện thử nghiệm mô hình ALS
-python -m src.ml.train_als
+# [Tâm] Huấn luyện ALS (thêm --tune để grid search) & lưu mô hình vào data/output/als_model
+python -m src.ml.train_als --env dev --tune
+# [Tâm] Đánh giá RMSE, Precision@K, NDCG@K, baseline Popularity & Cold-start -> metrics.json
+python -m src.ml.evaluate_model --env dev
+# [Tâm] Sinh Top-N từ mô hình đã lưu & phân cụm K-Means (bonus)
+python -m src.ml.generate_topn --env dev
+python -m src.ml.clustering --env dev
 
 # [Lộc] Đo đạc hiệu năng Speedup, Data Scaling & Xuất biểu đồ báo cáo
 python -m src.benchmarks.benchmark_speedup
