@@ -27,7 +27,34 @@ def main() -> None:
     movies_df = pd.read_parquet(movies_path)
 
     available_users = sorted(recs_df["user_id"].unique().tolist())
-    user_id = st.selectbox("Chọn User ID cần tra cứu gợi ý:", available_users[:500])
+    user_id = int(
+        st.number_input(
+            "Nhập User ID cần tra cứu gợi ý (ID chưa có lịch sử → gợi ý Cold-start):",
+            min_value=0,
+            value=int(available_users[0]) if available_users else 0,
+            step=1,
+        )
+    )
+
+    if user_id not in set(available_users):
+        popular_path = PROJECT_ROOT / cfg["paths"]["popular_parquet"]
+        if not popular_path.exists():
+            st.warning("User mới chưa có lịch sử và chưa có bảng Bayesian Popularity. Hãy chạy lại pipeline.")
+            return
+        top_n = int(cfg["als"].get("top_n", 20))
+        popular_df = (
+            pd.read_parquet(popular_path)
+            .sort_values("rank")
+            .head(top_n)
+            .merge(movies_df, on="movie_id", how="left")
+        )
+        st.info(f"User #{user_id} chưa có lịch sử đánh giá → gợi ý dự phòng theo Bayesian Popularity (Cold-start).")
+        st.dataframe(
+            popular_df[["rank", "movie_id", "title", "release_year", "genres", "num_ratings", "avg_rating", "bayes_score"]],
+            use_container_width=True,
+            hide_index=True,
+        )
+        return
 
     user_recs = (
         recs_df[recs_df["user_id"] == user_id]

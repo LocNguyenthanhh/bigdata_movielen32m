@@ -12,15 +12,35 @@
 
 ## 📌 1. Giới thiệu Đề tài
 
+> **Chủ đề**: *Topic 14 – Recommender Systems & HPC Benchmark*
+
 Dự án xây dựng một pipeline xử lý dữ liệu lớn và hệ thống gợi ý phim phân tán đầu-cuối (**End-to-End Distributed Recommender System**) trên tập dữ liệu chuẩn **MovieLens 32M** (~32 triệu lượt đánh giá) bằng **Apache Spark (PySpark)**, đồng thời thực hiện đánh giá hiệu năng tính toán hiệu năng cao (**HPC Benchmarking**).
 
-### Ba bài toán trọng tâm:
+### Bối cảnh
+Nhu cầu cá nhân hóa gợi ý trên hàng chục triệu tương tác vượt quá khả năng xử lý bộ nhớ của các công cụ máy đơn truyền thống. Vì vậy cần một nền tảng tính toán phân tán (Apache Spark) cho cả khâu tiền xử lý, huấn luyện mô hình lẫn đánh giá hiệu năng.
+
+### Mục tiêu trọng tâm
+- **Big Data ETL**: Tiền xử lý và lưu trữ phân tán 32M bản ghi với **PySpark** & **Apache Parquet**.
+- **Recommender System**: Huấn luyện mô hình lọc cộng tác **Spark MLlib ALS** sinh gợi ý **Top-N** và xử lý **Cold-start**.
+- **HPC & Quality Benchmark**: Đánh giá độ chính xác (**RMSE**, **NDCG@K**) và khả năng mở rộng tính toán (**Data Scaling**, **Speedup** – **Định luật Amdahl**).
+
+### Pipeline tổng quan
+
+```text
+MovieLens 32M (CSV)  →  Parquet Data Lake  →  Spark MLlib ALS (Top-N)  →  HPC Benchmark
+```
+
+![Sơ đồ kiến trúc tổng quan](reports/figures/architecture_overview.jpg)
+
+### Ba bài toán & Hướng giải quyết:
 1. **Lưu trữ & Tiền xử lý Phân tán (Big Data ETL)**:
-   - Giải quyết tình trạng tràn bộ nhớ (OOM) và nghẽn I/O của các công cụ đơn luồng truyền thống (Pandas/Scikit-learn) trên tập CSV ~1.0 GB.
-   - Chuyển đổi sang **Data Lake Apache Parquet** nén `snappy`, phân hoạch theo năm (`partitionBy("year")`), kết hợp `KryoSerializer` và Adaptive Query Execution (AQE).
+   - *Thách thức*: Công cụ đơn luồng truyền thống (Pandas/Scikit-learn) gây tràn bộ nhớ (OOM) và nghẽn I/O trên tập CSV ~1.0 GB (32M dòng).
+   - *Giải pháp*: Pipeline **PySpark DataFrame**, chuyển đổi sang **Data Lake Apache Parquet** nén `snappy`, phân hoạch theo năm (`partitionBy("year")`), kết hợp `KryoSerializer` và Adaptive Query Execution (AQE).
 2. **Lọc cộng tác Ma trận Thưa & Cold-start (Spark MLlib ALS)**:
-   - Huấn luyện thuật toán phân rã ma trận **Alternating Least Squares (ALS)** trên ma trận tương tác cực thưa ($>99.82\%$ khuyết giá trị) kết hợp kỹ thuật **Checkpointing** để cắt đồ thị RDD (DAG Lineage), tránh lỗi `StackOverflowError`.
+   - *Thách thức*: Ma trận tương tác cực thưa ($>99.82\%$ khuyết giá trị); đồ thị RDD (DAG Lineage) của ALS qua nhiều vòng lặp rất sâu, dễ gây `StackOverflowError`; người dùng mới chưa có lịch sử đánh giá (**Cold-start**).
+   - *Giải pháp*: Huấn luyện thuật toán phân rã ma trận **Alternating Least Squares (ALS)** kết hợp kỹ thuật **Checkpointing** để cắt DAG Lineage.
    - Sinh gợi ý **Top-N** cá nhân hóa, loại bỏ các bộ phim người dùng đã xem bằng phép kết `left_anti`.
+   - Với người dùng mới (Cold-start): gợi ý dự phòng theo **Bayesian Popularity** (điểm trung bình có trọng số Bayes, tránh thiên lệch về các phim có quá ít lượt đánh giá).
 3. **Đánh giá Chất lượng & Hiệu năng Phân tán (HPC & Quality Benchmark)**:
    - **Chất lượng thuật toán**: Đo lường `RMSE`, `Precision@K`, `NDCG@K` trên tập kiểm thử.
    - **Hiệu năng hệ thống (HPC)**: Khảo sát **Data Scalability** ($5\% \rightarrow 20\% \rightarrow 50\% \rightarrow 100\%$ dữ liệu) và kiểm chứng **Định luật Amdahl** qua hệ số tăng tốc **Speedup** ($S_p = T_1 / T_p$) và hiệu suất **Efficiency** ($E_p = S_p / p$) khi thay đổi số nhân xử lý (`local[1]`, `local[2]`, `local[4]`).
@@ -38,8 +58,11 @@ Tập dữ liệu chuẩn từ **GroupLens Research – University of Minnesota*
 | `tags.csv` | **2.000.072** nhãn | `userId`, `movieId`, `tag`, `timestamp` |
 | `links.csv` | **87.585** liên kết | `movieId`, `imdbId`, `tmdbId` |
 
-* **Quy mô**: $200.948$ người dùng ($\ge 20$ ratings/user), kích thước ma trận tương tác $200.948 \times 87.585 \approx 17.6$ tỷ ô.
-* **Độ thưa (Sparsity)**: $> 99.82\%$.
+**Đặc trưng Dữ liệu lớn:**
+
+* **Quy mô**: $200.948$ người dùng ($\ge 20$ ratings/user), dung lượng thô $\sim 1.0$ GB CSV; kích thước ma trận tương tác $200.948 \times 87.585 \approx 17.6$ tỷ ô.
+* **Độ thưa cao (Sparsity)**: Hơn $99.82\%$ ma trận User–Item bị khuyết giá trị, đòi hỏi giải thuật phân rã ma trận phân tán.
+* **Phân bố đuôi dài (Long-tail)**: Lượt đánh giá tập trung mạnh ở nhóm phim phổ biến, đa số phim thuộc vùng đuôi dài ít tương tác.
 
 ---
 
@@ -59,7 +82,7 @@ bigdata_movielen32m/
 ├── data/                              # Dữ liệu cục bộ (không commit lên Git)
 │   ├── raw/                           # Dữ liệu gốc tải về: ml-32m/ (ratings.csv, movies.csv, tags.csv)
 │   ├── lake/                          # Parquet Data Lake phân hoạch theo năm (ratings/, movies/)
-│   └── output/                        # topn_recommendations.parquet, metrics.json, benchmark_results.csv
+│   └── output/                        # topn_recommendations.parquet, popular_movies.parquet, metrics.json, benchmark_results.csv
 │
 ├── src/
 │   ├── __init__.py
@@ -74,7 +97,8 @@ bigdata_movielen32m/
 │   ├── ml/                            # ② PHẦN VIỆC CỦA TÂM: MÔ HÌNH HÓA PHÂN TÁN (SPARK MLLIB)
 │   │   ├── train_als.py               # Huấn luyện Spark ALS (phân rã ma trận User-Item)
 │   │   ├── evaluate_model.py          # Đánh giá thuật toán: RMSE, Precision@K, NDCG@K, Cold-start analysis
-│   │   └── generate_topn.py           # Sinh Top-20 phim gợi ý cho từng user (khử phim đã xem bằng left_anti)
+│   │   ├── generate_topn.py           # Sinh Top-20 phim gợi ý cho từng user (khử phim đã xem bằng left_anti)
+│   │   └── cold_start.py              # Cold-start: xếp hạng phim theo Bayesian Popularity cho user mới
 │   │
 │   ├── benchmarks/                    # ③ PHẦN VIỆC CỦA LỘC: ĐÁNH GIÁ HIỆU NĂNG HỆ THỐNG (HPC LAB FOCUS)
 │   │   ├── benchmark_speedup.py       # Đo thời gian khi đổi số Cores (1, 2, 4 cores -> Định luật Amdahl)
@@ -110,6 +134,9 @@ bigdata_movielen32m/
   - `movie_id` (`int`), `title` (`string`), `genres` (`array<string>`), `release_year` (`int`).
 * **`data/output/topn_recommendations.parquet`**:
   - `user_id` (`int`), `movie_id` (`int`), `score` (`float`), `rank` (`int`).
+* **`data/output/popular_movies.parquet`** *(gợi ý Cold-start)*:
+  - `movie_id` (`int`), `num_ratings` (`long`), `avg_rating` (`double`), `bayes_score` (`double`), `rank` (`int`).
+  - $WR = \frac{v}{v+m} R + \frac{m}{v+m} C$ với $v$ = số lượt đánh giá của phim, $R$ = điểm trung bình của phim, $C$ = điểm trung bình toàn cục, $m$ = phân vị `cold_start.min_votes_quantile` (mặc định 0.90) của số lượt đánh giá.
 * **`data/output/metrics.json`**:
   - Lưu siêu tham số, `rmse`, và `train_time_sec`.
 * **`data/output/benchmark_results.csv`**:

@@ -12,6 +12,7 @@ from src.benchmarks.benchmark_speedup import run_speedup_benchmark
 from src.benchmarks.plot_benchmarks import plot_benchmark_results
 from src.etl.csv_to_parquet import run_etl
 from src.etl.download_data import download_and_extract
+from src.ml.cold_start import compute_bayesian_popularity
 from src.ml.evaluate_model import evaluate_als_model
 from src.ml.generate_topn import generate_topn_recommendations
 from src.ml.train_als import load_and_split_ratings, train_als_model
@@ -59,6 +60,7 @@ def main() -> None:
     model, train_time = train_als_model(train_df, env=env)
     evaluate_als_model(model, test_df, train_time_sec=train_time, env=env)
     generate_topn_recommendations(model, ratings_df, env=env)
+    compute_bayesian_popularity(train_df, env=env)
 
     if args.with_benchmark:
         run_speedup_benchmark(env=env)
