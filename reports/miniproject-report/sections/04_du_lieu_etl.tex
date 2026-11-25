@@ -1,0 +1,115 @@
+\chapter{Dữ liệu và tiền xử lý phân tán}
+\label{chap:du_lieu}
+
+\section{Kiến trúc tổng thể}
+\label{sec:kien_truc}
+Hình~\ref{fig:kien_truc} mô tả pipeline của hệ thống gồm ba khối tương ứng ba bài toán ở Mục~\ref{sec:muc_tieu}. Khối (1) đọc \gls{csv} thô và ghi ra Data Lake Parquet. Khối (2) đọc Data Lake, huấn luyện \gls{als}, đánh giá, sinh Top-N, tính bảng Bayesian Popularity và (tùy chọn) phân cụm phim; kết quả được phục vụ qua một giao diện Streamlit. Khối (3) đọc lại Data Lake để đo thời gian huấn luyện ở nhiều cấu hình phần cứng và kích thước dữ liệu. Toàn bộ pipeline được điều phối bởi \texttt{run\_pipeline.py}; mọi đường dẫn và tham số nằm trong \texttt{configs/base.yaml}, được ghi đè bởi \texttt{dev.yaml} hoặc \texttt{prod.yaml}.
+
+\begin{figure}[H]
+\centering
+\resizebox{\textwidth}{!}{\input{images/pipeline.tex}}
+\vspace{5mm}
+\caption[Kiến trúc pipeline của hệ thống]{Kiến trúc pipeline của hệ thống. Khối cam là dữ liệu lưu trữ, khối xanh dương là bước xử lý Spark, khối xanh lá là đầu ra.}
+\label{fig:kien_truc}
+\end{figure}
+
+\section{Bộ dữ liệu MovieLens 32M}
+\label{sec:dataset}
+MovieLens 32M do GroupLens Research (University of Minnesota) công bố~\cite{grouplens32m}. Mỗi người dùng trong tập có ít nhất \num{20} lượt đánh giá. Bảng~\ref{tab:dataset} tóm tắt bốn tệp dữ liệu.
+
+\begin{table}[H]
+\centering
+\caption{Các tệp dữ liệu của MovieLens 32M}
+\label{tab:dataset}
+\begin{tabular}{l r l}
+\toprule
+\textbf{Tệp} & \textbf{Số bản ghi} & \textbf{Các trường chính} \\
+\midrule
+\texttt{ratings.csv} & \num{32000204} & \texttt{userId}, \texttt{movieId}, \texttt{rating} (\num{0,5}--\num{5,0}), \texttt{timestamp} \\
+\texttt{movies.csv}  & \num{87585}    & \texttt{movieId}, \texttt{title} (kèm năm), \texttt{genres} (20 thể loại) \\
+\texttt{tags.csv}    & \num{2000072}  & \texttt{userId}, \texttt{movieId}, \texttt{tag}, \texttt{timestamp} \\
+\texttt{links.csv}   & \num{87585}    & \texttt{movieId}, \texttt{imdbId}, \texttt{tmdbId} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Ba đặc trưng khiến bài toán cần xử lý phân tán:
+\begin{itemize}
+    \item \textbf{Quy mô}: \num{200948} người dùng, dung lượng thô khoảng \SI{1,0}{GB} \gls{csv}; ma trận tương tác có kích thước $\num{200948} \times \num{87585} \approx \num{17,6}$ tỷ ô.
+    \item \textbf{Độ thưa cao}: hơn \SI{99,82}{\percent} ô của ma trận người dùng--phim không có giá trị, nên không thể lưu dạng ma trận dày mà phải dùng phân rã ma trận trên dữ liệu thưa.
+    \item \textbf{Phân bố đuôi dài} (long-tail): lượt đánh giá tập trung ở một nhóm nhỏ phim phổ biến; đa số phim có rất ít tương tác.
+\end{itemize}
+
+\section{Phân tích khám phá dữ liệu}
+\label{sec:eda}
+\dy{(Quang) Tóm tắt kết quả notebooks/01\_eda\_movielens.ipynb: phân bố điểm rating (histogram), số rating mỗi người dùng và mỗi phim (biểu đồ log-log thể hiện long-tail), số rating theo năm, độ thưa tính được. Chèn 2--3 hình từ reports/figures/ bằng \textbackslash figph\{...\}. Mọi con số lấy từ kết quả notebook.}
+
+\begin{figure}[H]
+\centering
+\figph{eda_rating_distribution.png}
+\vspace{5mm}
+\caption[Phân bố điểm đánh giá]{Phân bố điểm đánh giá trong \texttt{ratings.csv}. \dy{Tên tệp hình theo notebook EDA.}}
+\label{fig:eda_rating}
+\end{figure}
+
+\section{Khởi tạo SparkSession}
+\label{sec:spark_session}
+Mô-đun \texttt{src/common/spark\_session.py} tạo một SparkSession dùng chung với các cấu hình chính:
+\begin{itemize}
+    \item \texttt{spark.serializer = KryoSerializer}: tuần tự hóa nhanh và gọn hơn Java serializer mặc định, giảm chi phí shuffle.
+    \item \texttt{spark.sql.adaptive.enabled = true}: bật \gls{aqe} để gộp phân vùng nhỏ sau shuffle.
+    \item \texttt{spark.sql.shuffle.partitions}: \num{16} ở \texttt{dev}, \num{64} ở \texttt{prod}.
+    \item Bộ nhớ driver và executor: \SI{4}{GB} ở \texttt{dev}, \SI{8}{GB} ở \texttt{prod}.
+    \item Thư mục checkpoint \texttt{data/checkpoints/}, phục vụ \gls{als} (Mục~\ref{sec:checkpoint}).
+\end{itemize}
+Tham số \texttt{master} mặc định là \texttt{local[*]} và có thể ghi đè (ví dụ \texttt{local[1]}, \texttt{local[4]}) khi đo hiệu năng.
+
+\section{Pipeline ETL: CSV sang Parquet}
+\label{sec:etl}
+Mô-đun \texttt{src/etl/download\_data.py} tải \texttt{ml-32m.zip} từ GroupLens và giải nén vào \texttt{data/raw/}, bỏ qua nếu dữ liệu đã có. Mô-đun \texttt{src/etl/csv\_to\_parquet.py} thực hiện các bước:
+\begin{enumerate}
+    \item Đọc \gls{csv} với \textbf{schema tường minh} (\texttt{StructType}) thay vì \texttt{inferSchema}, tránh một lần quét toàn bộ tệp chỉ để đoán kiểu, và cố định kiểu \texttt{int}, \texttt{float}, \texttt{long}.
+    \item Đổi tên cột sang dạng \texttt{snake\_case} (\texttt{user\_id}, \texttt{movie\_id}).
+    \item Với \texttt{ratings}: tạo cột \texttt{year} từ \texttt{timestamp} để làm khóa phân hoạch.
+    \item Với \texttt{movies}: tách năm phát hành khỏi tiêu đề bằng biểu thức chính quy \texttt{\textbackslash((\textbackslash d\{4\})\textbackslash)} thành \texttt{release\_year}, và tách chuỗi \texttt{genres} theo dấu \texttt{|} thành mảng.
+    \item Ghi Parquet nén \texttt{snappy}; bảng \texttt{ratings} phân hoạch theo \texttt{year}.
+\end{enumerate}
+
+\begin{lstlisting}[caption={Ghi bảng ratings ra Parquet phân hoạch theo năm}, label={lst:etl}]
+ratings_df = (
+    spark.read.csv(path, header=True, schema=RATINGS_SCHEMA)
+    .withColumnRenamed("userId", "user_id")
+    .withColumnRenamed("movieId", "movie_id")
+    .withColumn("year", F.year(F.from_unixtime(F.col("timestamp"))))
+)
+(ratings_df.write.mode("overwrite")
+    .partitionBy("year")
+    .option("compression", "snappy")
+    .parquet(ratings_out))
+\end{lstlisting}
+
+\dy{(Quang) Bổ sung số đo: dung lượng Parquet so với CSV, thời gian chạy ETL ở prod, số thư mục phân hoạch theo năm.}
+
+\section{Hợp đồng dữ liệu}
+\label{sec:contract}
+Để ba thành viên phát triển song song, nhóm cố định lược đồ của các bảng trung gian (Bảng~\ref{tab:contract}). Mỗi khối chỉ đọc và ghi theo hợp đồng này.
+
+\begin{table}[H]
+\centering
+\caption{Hợp đồng dữ liệu giữa các khối}
+\label{tab:contract}
+\small
+\begin{tabularx}{\textwidth}{l X}
+\toprule
+\textbf{Đường dẫn} & \textbf{Lược đồ} \\
+\midrule
+\texttt{data/lake/ratings/} & \texttt{user\_id} int, \texttt{movie\_id} int, \texttt{rating} float, \texttt{timestamp} long, \texttt{year} int (phân hoạch) \\
+\texttt{data/lake/movies/} & \texttt{movie\_id} int, \texttt{title} string, \texttt{genres} array<string>, \texttt{release\_year} int \\
+\texttt{data/output/topn\_recommendations.parquet} & \texttt{user\_id} int, \texttt{movie\_id} int, \texttt{score} float, \texttt{rank} int \\
+\texttt{data/output/popular\_movies.parquet} & \texttt{movie\_id}, \texttt{num\_ratings}, \texttt{avg\_rating}, \texttt{bayes\_score}, \texttt{rank} \\
+\texttt{data/output/movie\_clusters.parquet} & \texttt{movie\_id} int, \texttt{cluster} int \\
+\texttt{data/output/metrics.json} & siêu tham số, \texttt{rmse}, \texttt{als\_ranking}, \texttt{als\_filtered\_ranking}, \texttt{popularity\_baseline\_ranking}, \texttt{cold\_start} \\
+\texttt{data/output/benchmark\_results.csv} & \texttt{benchmark\_type}, \texttt{cores}, \texttt{sample\_fraction}, \texttt{als\_train\_sec}, \texttt{total\_sec}, \texttt{speedup}, \texttt{efficiency} \\
+\bottomrule
+\end{tabularx}
+\end{table}

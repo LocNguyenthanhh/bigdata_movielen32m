@@ -1,0 +1,58 @@
+% Phần C (Nguyễn Thanh Lộc): HPC benchmark, Amdahl, demo. Khoảng 3 phút, cộng 0:45 phần kết.
+
+\partslide{Phần C: Hiệu năng phân tán}{Nguyễn Thanh Lộc}{khoảng 3 phút}
+
+\begin{frame}{Phương pháp đo}
+  \begin{itemize}
+    \item \textbf{Data Scaling}: huấn luyện ALS trên \SI{5}{\percent}, \SI{20}{\percent}, \SI{50}{\percent}, \SI{100}{\percent} dữ liệu
+    \item \textbf{Speedup}: cùng dữ liệu, đổi \texttt{local[1]}, \texttt{local[2]}, \texttt{local[4]}
+  \end{itemize}
+  \[
+    S_p = \frac{T_1}{T_p}, \qquad E_p = \frac{S_p}{p}, \qquad
+    S_p \le \frac{1}{f + (1-f)/p} \quad \text{(Amdahl)}
+  \]
+  \begin{itemize}
+    \item Phần tuần tự $f$: đọc Parquet, điều phối trên driver, đồng bộ giữa các vòng lặp, checkpoint ghi đĩa
+    \item Kết quả ghi \texttt{benchmark\_results.csv}, biểu đồ tự sinh bằng \texttt{plot\_benchmarks.py}
+  \end{itemize}
+  \todo{Cấu hình máy đo: CPU, RAM, JDK 17, PySpark 3.5.3.}
+  \note{0:40. Nêu rõ điều kiện đo: một máy, mỗi cấu hình chạy mấy lần.}
+\end{frame}
+
+\begin{frame}{Data Scaling}
+  \centering
+  \figph{data_scalability.png}
+  \par\smallskip
+  \todo{Thời gian ở 5\% và 100\%; có tăng gần tuyến tính không; 32M dòng chạy ổn định, không OOM.}
+  \note{0:40. Đọc biểu đồ: trục x là phần trăm của 32M bản ghi, trục y là thời gian.}
+\end{frame}
+
+\begin{frame}{Speedup và định luật Amdahl}
+  \begin{columns}[c]
+    \column{0.58\textwidth}
+    \centering
+    \figph[\textwidth]{amdahl_speedup.png}
+    \column{0.38\textwidth}
+    \centering\small
+    \begin{tabular}{c c c c}
+      \toprule
+      $p$ & $T_p$ (s) & $S_p$ & $E_p$ \\
+      \midrule
+      1 & \todo{} & 1,00 & 1,00 \\
+      2 & \todo{} & \todo{} & \todo{} \\
+      4 & \todo{} & \todo{} & \todo{} \\
+      \bottomrule
+    \end{tabular}
+    \par\medskip
+    \todo{Tỉ lệ tuần tự ước lượng $f = \frac{p/S_p - 1}{p - 1}$.}
+  \end{columns}
+  \note{0:50. So với đường lý tưởng $S_p = p$; giải thích vì sao $E_p < 1$.}
+\end{frame}
+
+\begin{frame}{Demo tra cứu gợi ý}
+  \centering
+  \todo{Ảnh chụp hoặc clip Streamlit: nhập User ID có lịch sử $\rightarrow$ Top-20 phim;
+    nhập User ID mới $\rightarrow$ danh sách Bayesian Popularity
+    (\texttt{streamlit run src/demo/app\_demo.py}).}
+  \note{0:50. Quay demo riêng rồi ghép vào video, hoặc chèn ảnh chụp và thuyết minh.}
+\end{frame}

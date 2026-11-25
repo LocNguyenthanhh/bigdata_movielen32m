@@ -1,0 +1,81 @@
+% Slide báo cáo cuối kỳ: Hệ thống gợi ý phim với Spark MLlib ALS trên MovieLens 32M.
+% Khoảng 10 phút, quay thành một video; mỗi thành viên tự quay phần của mình.
+% Build: `make` (latexmk + XeLaTeX).
+\documentclass[aspectratio=169,11pt]{beamer}
+\input{preamble}
+\graphicspath{{../figures/}{../miniproject-report/images/}}
+
+\title[Gợi ý phim với Spark ALS]{Hệ thống Gợi ý Phim Quy mô lớn với Spark MLlib ALS\\
+  \& Đánh giá Hiệu năng Phân tán trên MovieLens 32M}
+\subtitle{Bài tập lớn môn Dữ liệu lớn (CO5135) -- Nhóm 261\_01}
+\author[N. T. Lộc, N. Đ. N. Quang, N. V. Tâm]{%
+  Nguyễn Thanh Lộc \,--\, 2311958 \quad
+  Nguyễn Đinh Nhật Quang \,--\, 2470068 \quad
+  Nguyễn Văn Tâm \,--\, 2570358}
+\supervisor{GVHD: GS.TS Thoại Nam \,--\, TS. Lê Thanh Vân}
+\institute[HCMUT]{%
+  Khoa Khoa học và Kỹ thuật Máy tính\\
+  Trường Đại học Bách khoa \,--\, ĐHQG TP.HCM}
+\date{12/2026}
+
+\begin{document}
+
+\begin{frame}[plain]
+  \titlepage
+  \note{0:00. Trang tiêu đề hiện trong lúc Quang giới thiệu nhóm (tính vào thời lượng Phần A).}
+\end{frame}
+
+\begin{frame}{Nội dung}
+  \tableofcontents
+  \note{0:00. Quang lướt qua; tính vào khung đầu của Phần A.}
+\end{frame}
+
+\input{parts/a-data}
+\input{parts/b-model}
+\input{parts/c-benchmark}
+
+\section{Kết luận}
+
+\begin{frame}{Kết quả đạt được}
+  \begin{itemize}
+    \item Pipeline đầu-cuối chạy bằng một lệnh: CSV $\rightarrow$ Parquet Data Lake $\rightarrow$
+      Spark ALS $\rightarrow$ Top-N, cold-start $\rightarrow$ HPC Benchmark.
+    \item Bảng số chính so với mục tiêu: \todo{RMSE, NDCG@10 so với baseline (metrics.json);
+      thời gian huấn luyện 32M dòng; Speedup và Efficiency ở 4 nhân (benchmark\_results.csv).}
+    \item Bài học: \todo{2--3 ý, ví dụ phần tuần tự (I/O, driver, shuffle) giới hạn Speedup theo
+      Amdahl; Parquet và schema tường minh giúp chạy được 32M dòng mà không OOM; cá nhân hóa của ALS
+      vượt hẳn baseline phổ biến.}
+  \end{itemize}
+  \note{0:45 cùng khung kế tiếp. Lộc trình bày, là người nói cuối.}
+\end{frame}
+
+\begin{frame}{Hạn chế và hướng phát triển}
+  \begin{columns}[T]
+    \column{0.48\textwidth}
+    \textbf{Hạn chế}
+    \begin{itemize}
+      \item Chạy \texttt{local[*]} trên một máy, chưa có chi phí mạng
+      \item Chỉ dùng điểm tường minh, chưa dùng tags, thể loại
+      \item Tập test chia ngẫu nhiên, không theo thời gian
+    \end{itemize}
+    \column{0.48\textwidth}
+    \textbf{Hướng phát triển}
+    \begin{itemize}
+      \item Chạy trên cụm Spark nhiều máy (Standalone, YARN, Databricks)
+      \item Mô hình lai: ALS + thể loại, tags
+      \item Gợi ý cho user mới theo cụm phim họ chọn (K-Means)
+    \end{itemize}
+  \end{columns}
+  \note{Tính trong 0:45 phần kết. Lộc trình bày.}
+\end{frame}
+
+\begin{frame}[plain]
+  \centering\vfill
+  {\usebeamercolor[fg]{title}\Huge\bfseries Cảm ơn thầy cô đã lắng nghe!\par}
+  \bigskip
+  {\Large Hỏi \& đáp\par}
+  \vfill
+  \note{Tính trong 0:45 phần kết. Lộc trình bày.}
+\end{frame}
+
+\end{document}

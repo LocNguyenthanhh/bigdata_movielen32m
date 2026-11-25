@@ -1,0 +1,107 @@
+% Phần B (Nguyễn Văn Tâm): ALS, tuning, Top-N, cold-start, chất lượng, ví dụ, K-Means. Khoảng 4 phút.
+
+\partslide{Phần B: Mô hình gợi ý ALS}{Nguyễn Văn Tâm}{khoảng 4 phút}
+
+\begin{frame}{Phân rã ma trận với ALS}
+  \[
+    \min_{U,V} \sum_{(u,i) \in \Omega} \left( r_{ui} - \mathbf{u}_u^\top \mathbf{v}_i \right)^2
+    + \lambda \Big( \sum_u n_u \lVert \mathbf{u}_u \rVert^2 + \sum_i n_i \lVert \mathbf{v}_i \rVert^2 \Big)
+  \]
+  \begin{itemize}
+    \item Cố định $V$ giải $U$, rồi cố định $U$ giải $V$: mỗi bước là bình phương tối thiểu có nghiệm đóng
+    \item Mỗi user (mỗi phim) cập nhật \textbf{độc lập} $\Rightarrow$ song song hóa tự nhiên; MLlib chia khối để giảm shuffle
+    \item \textbf{Checkpoint} mỗi 5 vòng lặp: cắt DAG lineage, tránh \texttt{StackOverflowError}
+    \item \texttt{nonnegative=True}, \texttt{coldStartStrategy="drop"}, \texttt{maxIter=10}
+  \end{itemize}
+  \note{0:35. Giải thích rank $k$ (số chiều vector ẩn) và regParam $\lambda$; vì sao ALS hợp với Spark.}
+\end{frame}
+
+\begin{frame}{E1: Tinh chỉnh siêu tham số}
+  \begin{columns}[c]
+    \column{0.56\textwidth}
+    \centering
+    \figph[\textwidth]{als_tuning_rmse.png}
+    \column{0.42\textwidth}
+    \begin{itemize}
+      \item Train/test 80/20 (\texttt{seed=42}); tách 10\% train làm validation
+      \item Lưới \texttt{rank} $\in \{10, 20, 50\}$ $\times$ \texttt{regParam} $\in \{0{,}01;\ 0{,}1\}$
+      \item Chọn theo RMSE validation, \textbf{không dùng tập test}
+    \end{itemize}
+    \todo{Cấu hình tốt nhất, RMSE validation, thời gian huấn luyện mỗi cấu hình.}
+  \end{columns}
+  \note{0:35. Đọc biểu đồ: regParam nhỏ thì overfit, RMSE tăng theo rank.}
+\end{frame}
+
+\begin{frame}{Sinh Top-20 và vấn đề phim ít đánh giá}
+  \begin{itemize}
+    \item \texttt{recommendForAllUsers} lấy dư ứng viên $\rightarrow$ loại phim đã xem bằng
+      \texttt{left\_anti} join (phân tán) $\rightarrow$ \texttt{row\_number()} giữ 20 phim đầu
+    \item \textbf{Vấn đề}: ALS tối ưu RMSE, không tối ưu xếp hạng. Phim chỉ có vài lượt đánh giá
+      có vector ít ràng buộc $\Rightarrow$ điểm dự đoán cao bất thường, chiếm đầu Top-N
+    \item \textbf{Cách xử lý}: chỉ gợi ý phim có số lượt đánh giá $\ge m$
+      (phân vị 90\%, cùng ngưỡng với Bayesian Popularity); lấy $N + 1000$ ứng viên trước khi lọc
+    \item Tham số \texttt{als.candidate\_min\_ratings\_quantile} (0 = tắt)
+  \end{itemize}
+  \todo{Ngưỡng $m$ và số phim còn lại sau lọc (metrics.json, als\_filtered\_ranking).}
+  \note{0:35. Đây là phát hiện quan trọng khi chạy trên dữ liệu thật; số liệu ở slide sau.}
+\end{frame}
+
+\begin{frame}{E2: Chất lượng gợi ý}
+  \begin{columns}[c]
+    \column{0.52\textwidth}
+    \centering\small
+    \begin{tabular}{l c c}
+      \toprule
+      \textbf{Phương pháp} & \textbf{P@10} & \textbf{NDCG@10} \\
+      \midrule
+      Bayesian Popularity & \todo{} & \todo{} \\
+      ALS thô             & \todo{} & \todo{} \\
+      ALS có lọc          & \todo{} & \todo{} \\
+      \bottomrule
+    \end{tabular}
+    \par\medskip
+    RMSE test của ALS: \todo{}
+    \column{0.46\textwidth}
+    \centering
+    \figph[\textwidth]{als_ranking_vs_baseline.png}
+  \end{columns}
+  \smallskip
+  {\footnotesize Phim liên quan: rating $\ge 4{,}0$ trong test; loại phim đã xem trong train;
+    mẫu cố định \todo{} user; \texttt{RankingEvaluator} của Spark MLlib.}
+  \note{0:45. So sánh ba dòng; giải thích vì sao Precision@K tuyệt đối thấp (ma trận rất thưa).}
+\end{frame}
+
+\begin{frame}{Cold-start: Bayesian Popularity}
+  \[
+    WR_i = \frac{v_i}{v_i + m} R_i + \frac{m}{v_i + m} C
+  \]
+  \begin{itemize}
+    \item $v_i$: số lượt đánh giá, $R_i$: điểm trung bình của phim; $C$: trung bình toàn cục
+    \item $m$ = phân vị 90\% số lượt đánh giá mỗi phim $\Rightarrow$ phim chỉ có vài điểm 5,0 bị kéo về $C$
+    \item User chưa có lịch sử $\rightarrow$ demo hiển thị bảng phổ biến thay cho Top-N cá nhân
+  \end{itemize}
+  \todo{$C$, $m$, top 3 phim của bảng phổ biến; tỉ lệ dòng test có user/phim mới và RMSE dự phòng (metrics.json, cold\_start).}
+  \note{0:35. Vì sao không xếp theo điểm trung bình thô.}
+\end{frame}
+
+\begin{frame}{Ví dụ gợi ý cho một người dùng}
+  \todo{User mẫu: cột trái 5 phim user chấm cao nhất, cột phải 5 phim ALS (có lọc) gợi ý
+    (sample\_user\_liked.csv, sample\_user\_topn.csv).}
+  \note{0:20. Chỉ ra điểm chung về thể loại giữa phim đã thích và phim được gợi ý.}
+\end{frame}
+
+\begin{frame}{Mở rộng: K-Means trên itemFactors}
+  \begin{columns}[c]
+    \column{0.55\textwidth}
+    \centering
+    \figph[\textwidth]{kmeans_pca_clusters.png}
+    \column{0.42\textwidth}
+    \begin{itemize}
+      \item Vector tiềm ẩn của phim, chỉ phim $\ge 20$ lượt đánh giá
+      \item Chọn $k$ theo Silhouette \& WSSSE
+      \item K-Means \textbf{không dùng thể loại}; thể loại chỉ để diễn giải cụm
+    \end{itemize}
+    \todo{2--3 cụm tiêu biểu (thể loại nổi bật, phim mẫu) từ kmeans\_profile.csv.}
+  \end{columns}
+  \note{0:20. Nếu cụm trùng thể loại: ALS học được ngữ nghĩa phim chỉ từ hành vi chấm điểm.}
+\end{frame}

@@ -1,0 +1,83 @@
+% Phần A (Nguyễn Đinh Nhật Quang): bài toán, dữ liệu, kiến trúc, ETL, EDA. Khoảng 3 phút.
+
+\partslide{Phần A: Dữ liệu và kiến trúc}{Nguyễn Đinh Nhật Quang}{khoảng 3 phút}
+
+\begin{frame}{Bài toán và mục tiêu}
+  \begin{itemize}
+    \item \textbf{Bối cảnh}: gợi ý cá nhân hóa trên hàng chục triệu tương tác vượt quá bộ nhớ của
+      công cụ một máy (Pandas, Scikit-learn).
+    \item \textbf{Ba bài toán}:
+    \begin{enumerate}
+      \item Lưu trữ \& tiền xử lý phân tán: PySpark + Apache Parquet
+      \item Lọc cộng tác trên ma trận thưa \& cold-start: Spark MLlib ALS, Top-N
+      \item Đánh giá chất lượng (RMSE, NDCG@K) \& hiệu năng (Data Scaling, Speedup -- Amdahl)
+    \end{enumerate}
+    \item \textbf{Phạm vi}: Spark \texttt{local[*]} trên một máy hoặc Colab; gợi ý theo lô.
+  \end{itemize}
+  \note{0:40. Gồm cả trang tiêu đề và mục lục: giới thiệu nhóm, rồi bối cảnh và ba bài toán.}
+\end{frame}
+
+\begin{frame}{Dữ liệu: MovieLens 32M}
+  \centering\small
+  \begin{tabular}{l r l}
+    \toprule
+    \textbf{Tệp} & \textbf{Bản ghi} & \textbf{Trường chính} \\
+    \midrule
+    \texttt{ratings.csv} & \num{32000204} & userId, movieId, rating (0,5--5,0), timestamp \\
+    \texttt{movies.csv}  & \num{87585}    & movieId, title (kèm năm), genres \\
+    \texttt{tags.csv}    & \num{2000072}  & userId, movieId, tag, timestamp \\
+    \texttt{links.csv}   & \num{87585}    & movieId, imdbId, tmdbId \\
+    \bottomrule
+  \end{tabular}
+  \par\bigskip
+  \begin{columns}[T]
+    \column{0.31\textwidth}
+    \begin{block}{Quy mô}
+      \num{200948} người dùng, $\sim$\SI{1,0}{GB} CSV, ma trận $\approx$ \num{17,6} tỷ ô
+    \end{block}
+    \column{0.31\textwidth}
+    \begin{block}{Độ thưa}
+      Hơn \SI{99,82}{\percent} ô trống $\Rightarrow$ cần phân rã ma trận phân tán
+    \end{block}
+    \column{0.31\textwidth}
+    \begin{block}{Đuôi dài}
+      Đánh giá dồn vào ít phim phổ biến; đa số phim rất ít tương tác
+    \end{block}
+  \end{columns}
+  \note{0:40. Nhấn mạnh ba đặc trưng dữ liệu lớn: quy mô, độ thưa, đuôi dài.}
+\end{frame}
+
+\begin{frame}{Kiến trúc pipeline}
+  \centering
+  \resizebox{\textwidth}{!}{\input{../miniproject-report/images/pipeline.tex}}
+  \note{0:40. Đi theo ba khối: (1) CSV sang Parquet; (2) ALS, đánh giá, Top-N, cold-start,
+    K-Means, demo; (3) đo hiệu năng đọc lại Data Lake. Mọi bước chạy bằng
+    \texttt{run\_pipeline.py}, cấu hình dev (5\%) và prod (100\%).}
+\end{frame}
+
+\begin{frame}[fragile]{ETL: CSV $\rightarrow$ Parquet Data Lake}
+  \begin{itemize}
+    \item Đọc CSV với \textbf{schema tường minh} (\texttt{StructType}), không \texttt{inferSchema}
+    \item Chuẩn hóa: \texttt{user\_id}, \texttt{movie\_id}; tách \texttt{release\_year} và mảng \texttt{genres}
+    \item Ghi Parquet nén \texttt{snappy}, \textbf{phân hoạch theo năm}
+    \item SparkSession: \texttt{KryoSerializer}, AQE, shuffle partitions 16 (dev) / 64 (prod)
+  \end{itemize}
+  \smallskip
+  \begin{block}{}
+  \scriptsize
+\begin{verbatim}
+ratings_df.write.mode("overwrite").partitionBy("year") \
+          .option("compression", "snappy").parquet("data/lake/ratings")
+\end{verbatim}
+  \end{block}
+  \todo{Dung lượng Parquet so với CSV và thời gian ETL ở prod.}
+  \note{0:30. Vì sao Parquet: đọc theo cột, nén, bỏ qua phân hoạch không cần.}
+\end{frame}
+
+\begin{frame}{Phân tích khám phá dữ liệu}
+  \centering
+  \figph{eda_rating_distribution.png}
+  \par\smallskip
+  \todo{1--2 hình từ notebooks/01\_eda\_movielens.ipynb: phân bố rating, long-tail (log-log).}
+  \note{0:30. Đọc hình: rating lệch về 3--4 điểm; đuôi dài giải thích vì sao cần cold-start.}
+\end{frame}

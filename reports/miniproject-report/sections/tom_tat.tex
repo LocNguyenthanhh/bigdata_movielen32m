@@ -1,0 +1,12 @@
+\chapter*{Tóm tắt}
+\thispagestyle{empty}
+\addcontentsline{toc}{chapter}{Tóm tắt}
+
+Nhu cầu cá nhân hóa gợi ý trên hàng chục triệu lượt tương tác vượt quá khả năng xử lý bộ nhớ của các công cụ chạy trên một máy như Pandas hay Scikit-learn. Báo cáo này trình bày một hệ thống gợi ý phim đầu-cuối chạy phân tán trên Apache Spark (PySpark), sử dụng tập dữ liệu chuẩn MovieLens 32M gồm \num{32000204} lượt đánh giá của \num{200948} người dùng trên \num{87585} bộ phim, với ma trận tương tác thưa hơn \SI{99,82}{\percent}.
+
+Hệ thống gồm ba khối. Khối \gls{etl} chuyển \gls{csv} thô (khoảng \SI{1,0}{GB}) sang Data Lake Apache Parquet nén \texttt{snappy}, phân hoạch theo năm, bật KryoSerializer và \gls{aqe}. Khối mô hình huấn luyện lọc cộng tác \gls{als} của Spark MLlib kèm checkpoint để cắt đồ thị \gls{rdd}, tinh chỉnh siêu tham số, sinh gợi ý Top-N đã loại phim người dùng đã xem bằng phép kết \texttt{left\_anti}, và xử lý người dùng mới (cold-start) bằng Bayesian Popularity. Khối đánh giá đo chất lượng gợi ý (\gls{rmse}, Precision@K, \gls{ndcg}@K) và hiệu năng phân tán: khả năng mở rộng theo kích thước dữ liệu (\SI{5}{\percent} đến \SI{100}{\percent}) và tăng tốc theo số nhân xử lý, đối chiếu với định luật Amdahl.
+
+\dy{Kết quả chính (điền sau khi chạy prod): RMSE và NDCG@10 của ALS so với baseline phổ biến (data/output/metrics.json); thời gian huấn luyện trên 32M dòng; speedup và efficiency ở 4 nhân (data/output/benchmark\_results.csv). Một câu nhận xét về mức tuyến tính của Data Scaling.}
+
+\vspace{0.5em}
+\noindent\textbf{Từ khóa:} hệ thống gợi ý, lọc cộng tác, Apache Spark, Spark MLlib ALS, MovieLens 32M, Apache Parquet, định luật Amdahl, tính toán phân tán.

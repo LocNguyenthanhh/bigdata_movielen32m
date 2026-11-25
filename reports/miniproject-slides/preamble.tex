@@ -1,0 +1,74 @@
+% Giao diện slide: Beamer Boadilla, màu HCMUT, logo BK góc phải trên. Build bằng XeLaTeX.
+\usepackage{fontspec}
+\usepackage[vietnamese]{babel}
+\setsansfont{texgyreheros}[
+    Extension=.otf,
+    UprightFont=*-regular,
+    BoldFont=*-bold,
+    ItalicFont=*-italic,
+    BoldItalicFont=*-bolditalic]
+\setmonofont{lmmono10}[Extension=.otf, UprightFont=*-regular]
+
+\usetheme{Boadilla}
+\definecolor{bkblue}{RGB}{3,41,144}
+\definecolor{bklight}{RGB}{20,130,220}
+\setbeamercolor{structure}{fg=bkblue}
+\setbeamercolor{palette primary}{bg=bkblue, fg=white}
+\setbeamercolor{palette secondary}{bg=bklight, fg=white}
+\setbeamercolor{palette tertiary}{bg=bkblue!85!black, fg=white}
+\setbeamercolor{title}{fg=bkblue}
+\setbeamercolor{frametitle}{fg=bkblue, bg=white}
+\setbeamercolor{block title}{bg=bkblue, fg=white}
+\setbeamercolor{block body}{bg=bkblue!6}
+\setbeamertemplate{navigation symbols}{}
+\setbeamertemplate{itemize items}[circle]
+\setbeamerfont{frametitle}{series=\bfseries}
+
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs,tabularx}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,fit,backgrounds}
+\usepackage{siunitx}
+\sisetup{output-decimal-marker={,}, group-separator={.}, mode=text}
+
+% Logo trường ở góc phải trên của mọi khung (trừ trang tiêu đề, đã có logo lớn).
+\newcommand{\schoollogo}{\includegraphics[height=1.0cm]{logoBK.jpg}}
+\addtobeamertemplate{frametitle}{}{%
+  \begin{tikzpicture}[remember picture,overlay]
+    \node[anchor=north east, inner sep=0pt] at ([xshift=-2mm,yshift=-2mm]current page.north east) {\schoollogo};
+  \end{tikzpicture}}
+
+% Giảng viên hướng dẫn, in trên trang tiêu đề.
+\newcommand{\supervisor}[1]{\def\insertsupervisor{#1}}
+\def\insertsupervisor{}
+\setbeamertemplate{title page}{%
+  \vbox{}\vskip-2mm
+  \begin{center}
+    \includegraphics[height=1.4cm]{logoBK.jpg}\par\medskip
+    {\usebeamerfont{institute}\scriptsize\insertinstitute\par}\medskip
+    {\usebeamercolor[fg]{title}\usebeamerfont{title}\bfseries\Large\inserttitle\par}\smallskip
+    {\usebeamerfont{subtitle}\small\insertsubtitle\par}\medskip
+    {\small\bfseries\insertsupervisor\par}\smallskip
+    {\footnotesize\insertauthor\par}\smallskip
+    {\scriptsize\insertdate\par}
+  \end{center}}
+
+% Phần việc còn thiếu: in đỏ để không quên trước khi quay video.
+\newcommand{\todo}[1]{{\color{red}\itshape [TODO: #1]}}
+
+% Khung mở đầu mỗi phần: tên phần, người trình bày, thời lượng.
+\newcommand{\partslide}[3]{%
+  \section{#1}
+  \begin{frame}[plain]
+    \centering\vfill
+    {\usebeamercolor[fg]{title}\Huge\bfseries #1\par}\bigskip
+    {\Large #2\par}\smallskip
+    {\small\color{gray} #3\par}
+    \vfill
+  \end{frame}}
+
+% Hình do pipeline sinh ra; chưa có thì vẽ khung xám.
+\newcommand{\figph}[2][\textwidth]{%
+  \IfFileExists{../figures/\detokenize{#2}}{\includegraphics[width=#1,height=0.68\textheight,keepaspectratio]{#2}}{%
+    \fbox{\parbox[c][0.55\textheight][c]{0.75\textwidth}{\centering\color{gray}\itshape
+      Chưa có hình\par{\scriptsize\texttt{reports/figures/}\allowbreak\texttt{\detokenize{#2}}}\par(sinh ra khi chạy pipeline)}}}}
