@@ -1,0 +1,35 @@
+\chapter{Mở đầu}
+\label{chap:mo_dau}
+
+\section{Lý do chọn đề tài}
+\label{sec:ly_do}
+Các nền tảng xem phim, thương mại điện tử hay mạng xã hội đều dựa vào \textbf{hệ thống gợi ý} (recommender system) để đưa nội dung phù hợp tới từng người dùng. Dữ liệu đầu vào của các hệ thống này là lịch sử tương tác giữa người dùng và sản phẩm, thường lên tới hàng chục triệu bản ghi. Ở quy mô đó, các công cụ xử lý trên một máy như Pandas hay Scikit-learn nạp toàn bộ dữ liệu vào bộ nhớ và chạy đơn luồng, nên dễ gặp lỗi \gls{oom} và nghẽn I/O.
+
+Bài tập lớn thuộc chủ đề \emph{Topic 14 -- Recommender Systems \& HPC Benchmark}. Nhóm chọn tập MovieLens 32M~\cite{grouplens32m,harper2015movielens} vì đây là tập dữ liệu chuẩn, đủ lớn để thấy rõ lợi ích của xử lý phân tán, đồng thời có cấu trúc rõ ràng để đánh giá chất lượng gợi ý. Apache Spark~\cite{zaharia2012rdd} được chọn làm nền tảng tính toán vì cung cấp sẵn DataFrame phân tán, thư viện học máy MLlib~\cite{meng2016mllib} với thuật toán \gls{als}, và có thể chạy từ một máy (\texttt{local[*]}) tới một cụm nhiều máy mà không đổi mã nguồn.
+
+\section{Mục tiêu}
+\label{sec:muc_tieu}
+Đề tài đặt ra ba mục tiêu, tương ứng ba bài toán:
+\begin{enumerate}
+    \item \textbf{Lưu trữ và tiền xử lý phân tán}: chuyển \num{32000204} bản ghi \gls{csv} sang Data Lake Parquet, đọc và biến đổi bằng PySpark mà không gặp \gls{oom}.
+    \item \textbf{Lọc cộng tác trên ma trận thưa và cold-start}: huấn luyện \gls{als} trên ma trận thưa hơn \SI{99,82}{\percent}, sinh Top-N phim chưa xem cho từng người dùng, và có gợi ý dự phòng cho người dùng mới.
+    \item \textbf{Đánh giá chất lượng và hiệu năng}: đo \gls{rmse}, Precision@K, \gls{ndcg}@K; khảo sát thời gian chạy khi tăng dữ liệu (\SI{5}{\percent}, \SI{20}{\percent}, \SI{50}{\percent}, \SI{100}{\percent}) và khi tăng số nhân (1, 2, 4), từ đó kiểm chứng định luật Amdahl~\cite{amdahl1967}.
+\end{enumerate}
+
+\section{Phạm vi}
+\label{sec:pham_vi}
+Hệ thống chạy Spark ở chế độ cục bộ (\texttt{local[*]}) trên một máy tính cá nhân hoặc Google Colab, không dựng cụm Docker hay Kubernetes. Dữ liệu dùng là \texttt{ratings.csv} và \texttt{movies.csv} của MovieLens 32M; \texttt{tags.csv} và \texttt{links.csv} không được dùng để huấn luyện. Hệ thống gợi ý theo lô (batch): mô hình được huấn luyện lại khi chạy pipeline, kết quả Top-N lưu ra Parquet và được tra cứu qua một giao diện Streamlit tối giản. Đề tài không xây dựng API phục vụ trực tuyến, không xử lý luồng sự kiện thời gian thực.
+
+\section{Đóng góp}
+\label{sec:dong_gop}
+\begin{itemize}
+    \item Một pipeline chạy được đầu-cuối bằng một lệnh (\texttt{run\_pipeline.py}): tải dữ liệu, \gls{etl}, huấn luyện, đánh giá, sinh Top-N, đo hiệu năng.
+    \item Hai cấu hình \texttt{dev} (mẫu \SI{5}{\percent}) và \texttt{prod} (\SI{100}{\percent}) cho phép kiểm thử nhanh rồi mới chạy toàn bộ dữ liệu.
+    \item Bộ đánh giá gồm cả độ đo dự đoán điểm (\gls{rmse}) lẫn độ đo xếp hạng (Precision@K, \gls{ndcg}@K), có baseline Bayesian Popularity để so sánh.
+    \item Bộ thực nghiệm hiệu năng tái lập được, ghi kết quả ra CSV và tự vẽ biểu đồ Speedup, Data Scalability.
+    \item (Mở rộng) Phân cụm phim bằng K-Means trên vector tiềm ẩn của \gls{als}.
+\end{itemize}
+
+\section{Cấu trúc báo cáo}
+\label{sec:cau_truc}
+Chương~\ref{chap:tong_quan} giới thiệu tổng quan về hệ thống gợi ý và xử lý dữ liệu lớn. Chương~\ref{chap:co_so} trình bày cơ sở lý thuyết: \gls{als}, các độ đo đánh giá, Bayesian Popularity và định luật Amdahl. Chương~\ref{chap:du_lieu} mô tả dữ liệu và khối \gls{etl}. Chương~\ref{chap:mo_hinh} trình bày thiết kế và hiện thực mô hình gợi ý. Chương~\ref{chap:danh_gia} trình bày thực nghiệm và đánh giá. Chương~\ref{chap:ket_luan} kết luận và nêu hướng phát triển. Phụ lục ghi lại cách tái lập thực nghiệm và phân công công việc.

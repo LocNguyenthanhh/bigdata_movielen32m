@@ -36,6 +36,9 @@ als:
   nonnegative: true
   checkpoint_interval: 5
   top_n: 20
+  # Chỉ gợi ý phim có số lượt đánh giá >= phân vị này (0 = tắt). ALS tối ưu RMSE
+  # hay đẩy phim rất ít lượt đánh giá lên đầu Top-N.
+  candidate_min_ratings_quantile: 0.90
 
 cold_start:
   # Gợi ý dự phòng cho user mới bằng Bayesian Popularity (Weighted Rating)
@@ -62,3 +65,7 @@ evaluation:
   relevance_threshold: 4.0
   # Số ứng viên lấy dư (ngoài K) trước khi loại phim đã xem
   ranking_candidates: 100
+  # Số ứng viên lấy dư khi bật lọc phim theo số lượt đánh giá
+  filtered_candidates: 1000
+  # Số user (lấy mẫu cố định theo seed) dùng tính Precision@K / NDCG@K; 0 = tất cả
+  ranking_user_sample: 20000

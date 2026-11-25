@@ -1,0 +1,81 @@
+\chapter{Cơ sở lý thuyết}
+\label{chap:co_so}
+
+\section{Phân rã ma trận và thuật toán ALS}
+\label{sec:als}
+Gọi $R \in \mathbb{R}^{m \times n}$ là ma trận điểm với $m$ người dùng và $n$ bộ phim; chỉ các ô $(u,i) \in \Omega$ đã được chấm là biết giá trị $r_{ui}$. Phân rã ma trận tìm hai ma trận nhân tố $U \in \mathbb{R}^{m \times k}$ và $V \in \mathbb{R}^{n \times k}$ với $k \ll \min(m,n)$ (tham số \texttt{rank}), sao cho $r_{ui} \approx \mathbf{u}_u^\top \mathbf{v}_i$. Hàm mục tiêu có điều chuẩn~\cite{koren2009matrix,zhou2008als}:
+\begin{ctbox}
+\begin{equation}
+  \min_{U,V} \sum_{(u,i) \in \Omega} \left( r_{ui} - \mathbf{u}_u^\top \mathbf{v}_i \right)^2
+  + \lambda \left( \sum_u n_u \lVert \mathbf{u}_u \rVert^2 + \sum_i n_i \lVert \mathbf{v}_i \rVert^2 \right)
+  \label{eq:als_loss}
+\end{equation}
+\end{ctbox}
+trong đó $\lambda$ là hệ số điều chuẩn (\texttt{regParam}), $n_u$ và $n_i$ là số lượt đánh giá của người dùng $u$ và phim $i$ (điều chuẩn có trọng số theo Zhou và cộng sự).
+
+Hàm~\eqref{eq:als_loss} không lồi theo $(U,V)$ đồng thời, nhưng lồi theo từng ma trận khi cố định ma trận còn lại. \gls{als} vì vậy luân phiên hai bước: cố định $V$ và giải $U$, rồi cố định $U$ và giải $V$. Mỗi bước là một bài toán bình phương tối thiểu có nghiệm đóng:
+\begin{ctbox}
+\begin{equation}
+  \mathbf{u}_u = \left( V_{\Omega_u}^\top V_{\Omega_u} + \lambda n_u I_k \right)^{-1} V_{\Omega_u}^\top \mathbf{r}_u
+  \label{eq:als_update}
+\end{equation}
+\end{ctbox}
+với $V_{\Omega_u}$ là các hàng của $V$ ứng với phim người dùng $u$ đã chấm. Các người dùng được cập nhật \emph{độc lập với nhau}, nên bước này song song hóa tự nhiên trên nhiều nhân hoặc nhiều máy. Spark MLlib chia người dùng và phim thành các khối, mỗi khối chỉ nhận những vector nhân tố mà nó cần, để giảm dữ liệu shuffle~\cite{meng2016mllib}.
+
+Hiện thực dùng thêm ràng buộc không âm (\texttt{nonnegative=True}) để nhân tố dễ diễn giải hơn, và chiến lược \texttt{coldStartStrategy="drop"} để bỏ các dự đoán NaN của người dùng hoặc phim không có trong tập huấn luyện khi tính độ đo.
+
+\section{Đồ thị lineage và checkpoint}
+\label{sec:checkpoint}
+Mỗi vòng lặp \gls{als} tạo thêm các \gls{rdd} mới phụ thuộc vào vòng trước, nên đồ thị lineage dài ra theo số vòng lặp. Với nhiều vòng lặp, việc tuần tự hóa và duyệt đồ thị quá sâu gây lỗi \texttt{StackOverflowError} trên driver. \textbf{Checkpoint} ghi dữ liệu trung gian xuống đĩa và cắt lineage tại điểm đó. Trong Spark MLlib, tham số \texttt{checkpointInterval} quy định cứ bao nhiêu vòng lặp thì checkpoint một lần; điều này chỉ có tác dụng khi đã gọi \texttt{SparkContext.setCheckpointDir}.
+
+\section{Gợi ý cho người dùng mới: Bayesian Popularity}
+\label{sec:bayes}
+Người dùng mới chưa có vector nhân tố nên \gls{als} không thể gợi ý. Cách dự phòng đơn giản là gợi ý phim được đánh giá cao. Tuy nhiên, xếp theo điểm trung bình thô sẽ đưa lên đầu các phim chỉ có một vài lượt chấm \num{5,0}. \textbf{Điểm có trọng số Bayes} (weighted rating) kéo điểm của phim ít lượt đánh giá về trung bình chung:
+\begin{ctbox}
+\begin{equation}
+  WR_i = \frac{v_i}{v_i + m} R_i + \frac{m}{v_i + m} C
+  \label{eq:bayes}
+\end{equation}
+\end{ctbox}
+trong đó $v_i$ là số lượt đánh giá của phim $i$, $R_i$ là điểm trung bình của phim, $C$ là điểm trung bình trên toàn bộ dữ liệu, và $m$ là số lượt đánh giá ``tiên nghiệm''. Hệ thống chọn $m$ bằng phân vị thứ \num{90} của phân phối số lượt đánh giá mỗi phim (tham số \texttt{cold\_start.min\_votes\_quantile}). Khi $v_i \gg m$, $WR_i \approx R_i$; khi $v_i \ll m$, $WR_i \approx C$.
+
+\section{Các độ đo đánh giá chất lượng}
+\label{sec:do_do}
+\textbf{\gls{rmse}} đo sai số dự đoán điểm trên tập kiểm thử $\mathcal{T}$:
+\begin{equation}
+  \mathrm{RMSE} = \sqrt{\frac{1}{|\mathcal{T}|} \sum_{(u,i) \in \mathcal{T}} \left( r_{ui} - \hat{r}_{ui} \right)^2 }
+  \label{eq:rmse}
+\end{equation}
+
+\gls{rmse} chỉ đánh giá độ chính xác của điểm, trong khi người dùng chỉ nhìn thấy vài phim đầu danh sách. Vì vậy hệ thống đo thêm hai độ đo xếp hạng. Với mỗi người dùng $u$, gọi $L_u^K$ là danh sách $K$ phim gợi ý (đã loại phim $u$ xem trong tập huấn luyện) và $G_u$ là tập phim ``liên quan'', tức các phim $u$ chấm từ \num{4,0} trở lên trong tập kiểm thử:
+\begin{equation}
+  \mathrm{Precision@K} = \frac{1}{|\mathcal{U}|} \sum_{u \in \mathcal{U}} \frac{|L_u^K \cap G_u|}{K}
+  \label{eq:precision}
+\end{equation}
+\begin{equation}
+  \mathrm{NDCG@K} = \frac{1}{|\mathcal{U}|} \sum_{u \in \mathcal{U}} \frac{\mathrm{DCG}_u@K}{\mathrm{IDCG}_u@K},
+  \qquad
+  \mathrm{DCG}_u@K = \sum_{j=1}^{K} \frac{\mathbf{1}\left[ L_u^K[j] \in G_u \right]}{\log_2(j+1)}
+  \label{eq:ndcg}
+\end{equation}
+trong đó $\mathrm{IDCG}_u@K$ là DCG của danh sách lý tưởng (mọi phim liên quan xếp đầu)~\cite{jarvelin2002ndcg}. \gls{ndcg} thưởng nhiều hơn cho phim liên quan nằm ở vị trí cao.
+
+\section{Phân cụm K-Means}
+\label{sec:kmeans}
+K-Means chia $N$ điểm thành $k$ cụm bằng cách lặp hai bước: gán mỗi điểm vào tâm gần nhất, rồi cập nhật tâm bằng trung bình các điểm trong cụm, nhằm cực tiểu \gls{wssse}. Số cụm $k$ được chọn bằng phương pháp khuỷu tay (elbow) trên \gls{wssse} và hệ số \textbf{Silhouette}~\cite{rousseeuw1987silhouette}, nằm trong $[-1, 1]$, càng gần \num{1} thì các cụm càng tách biệt. Đề tài áp dụng K-Means lên các vector $\mathbf{v}_i$ của \gls{als} để gom các phim được cùng nhóm người dùng ưa thích.
+
+\section{Định luật Amdahl, Speedup và Efficiency}
+\label{sec:amdahl}
+Gọi $T_1$ là thời gian chạy với một nhân và $T_p$ là thời gian với $p$ nhân. \textbf{Hệ số tăng tốc} và \textbf{hiệu suất} được định nghĩa:
+\begin{equation}
+  S_p = \frac{T_1}{T_p}, \qquad E_p = \frac{S_p}{p}
+  \label{eq:speedup}
+\end{equation}
+Nếu một tỉ lệ $f$ của chương trình buộc phải chạy tuần tự (đọc ghi đĩa, điều phối trên driver, đồng bộ giữa các vòng lặp), định luật Amdahl~\cite{amdahl1967} cho giới hạn trên của tăng tốc:
+\begin{ctbox}
+\begin{equation}
+  S_p \le \frac{1}{f + \dfrac{1-f}{p}} \;\xrightarrow{\;p \to \infty\;}\; \frac{1}{f}
+  \label{eq:amdahl}
+\end{equation}
+\end{ctbox}
+Từ $S_p$ đo được có thể ước lượng ngược tỉ lệ tuần tự $f = \dfrac{p/S_p - 1}{p - 1}$, dùng để giải thích vì sao hiệu suất giảm khi tăng số nhân.

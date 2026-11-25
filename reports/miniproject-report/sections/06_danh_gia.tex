@@ -1,0 +1,126 @@
+\chapter{Thực nghiệm và đánh giá}
+\label{chap:danh_gia}
+
+Các thực nghiệm được đặt tên E1--E4. Mọi con số trong chương này lấy từ các tệp đầu ra của pipeline (\texttt{data/output/}) và biểu đồ trong \texttt{reports/figures/}.
+
+\section{Môi trường thực nghiệm}
+\label{sec:moi_truong}
+\dy{(Lộc) Bảng cấu hình máy: CPU (số nhân vật lý/logic), RAM, hệ điều hành; phiên bản Python, PySpark 3.5.3, Java (JDK 17); hoặc Google Colab High-RAM nếu chạy prod trên Colab. Ghi commit/tag dùng để chạy.}
+
+\begin{table}[H]
+\centering
+\caption{Các thực nghiệm}
+\label{tab:experiments}
+\begin{tabularx}{\textwidth}{l X l}
+\toprule
+\textbf{Mã} & \textbf{Nội dung} & \textbf{Đầu ra} \\
+\midrule
+E1 & Tinh chỉnh \texttt{rank} $\times$ \texttt{regParam} trên tập kiểm định & \texttt{tuning\_results.csv} \\
+E2 & Chất lượng gợi ý: RMSE, Precision@K, NDCG@K, so với baseline; cold-start & \texttt{metrics.json} \\
+E3 & Data Scaling: thời gian huấn luyện ở \SI{5}{\percent}, \SI{20}{\percent}, \SI{50}{\percent}, \SI{100}{\percent} dữ liệu & \texttt{benchmark\_results.csv} \\
+E4 & Speedup và Efficiency với \texttt{local[1]}, \texttt{local[2]}, \texttt{local[4]} & \texttt{benchmark\_results.csv} \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\section{E1: Tinh chỉnh siêu tham số}
+\label{sec:e1}
+\dy{(Tâm) Bảng RMSE kiểm định theo rank và regParam từ data/output/tuning\_results.csv (chạy prod với \texttt{-{}-with-tuning}). Nhận xét: rank lớn có giảm RMSE không, regParam nhỏ có gây overfit không, thời gian huấn luyện tăng theo rank thế nào. Nêu cấu hình được chọn.}
+
+\begin{table}[H]
+\centering
+\caption{RMSE trên tập kiểm định theo siêu tham số}
+\label{tab:e1}
+\begin{tabular}{c c c c}
+\toprule
+\texttt{rank} & \texttt{regParam} & RMSE kiểm định & Thời gian huấn luyện (s) \\
+\midrule
+10 & 0,01 & \dy{--} & \dy{--} \\
+10 & 0,1  & \dy{--} & \dy{--} \\
+20 & 0,01 & \dy{--} & \dy{--} \\
+20 & 0,1  & \dy{--} & \dy{--} \\
+50 & 0,01 & \dy{--} & \dy{--} \\
+50 & 0,1  & \dy{--} & \dy{--} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{E2: Chất lượng gợi ý}
+\label{sec:e2}
+\dy{(Tâm) Điền từ data/output/metrics.json bản prod. Nhận xét: ALS so với baseline phổ biến tăng bao nhiêu lần ở NDCG@10; vì sao Precision@K tuyệt đối thấp (ma trận rất thưa, chỉ một phần nhỏ phim liên quan nằm trong test).}
+
+\begin{table}[H]
+\centering
+\caption{Chất lượng gợi ý trên tập kiểm thử}
+\label{tab:e2}
+\begin{tabular}{l c c c c c}
+\toprule
+\textbf{Phương pháp} & \textbf{RMSE} & \textbf{P@10} & \textbf{NDCG@10} & \textbf{P@20} & \textbf{NDCG@20} \\
+\midrule
+Bayesian Popularity & -- & \dy{--} & \dy{--} & \dy{--} & \dy{--} \\
+ALS                 & \dy{--} & \dy{--} & \dy{--} & \dy{--} & \dy{--} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Phân tích cold-start}
+\dy{(Tâm) Từ khóa cold\_start trong metrics.json: tỉ lệ dòng test có user/phim mới, số user mới; RMSE của dự phòng Bayes so với trung bình toàn cục trên các dòng này. Nhận xét: vì mỗi user có ít nhất 20 rating và chia ngẫu nhiên theo rating, cold-start trong test rất hiếm; trong thực tế user mới là trường hợp thường gặp nên vẫn cần dự phòng.}
+
+\subsection{Phân cụm phim (mở rộng)}
+\dy{(Tâm) Chèn hình kmeans\_choose\_k.png và kmeans\_pca\_clusters.png do notebook 02 sinh ra; bảng 3--4 cụm tiêu biểu với thể loại nổi bật và phim mẫu.}
+
+\begin{figure}[H]
+\centering
+\figph[0.75\textwidth]{kmeans_pca_clusters.png}
+\vspace{5mm}
+\caption[Các cụm phim trên không gian itemFactors]{Các cụm phim trên không gian itemFactors, chiếu xuống 2 chiều bằng \gls{pca}.}
+\label{fig:kmeans}
+\end{figure}
+
+\section{E3: Khả năng mở rộng theo kích thước dữ liệu}
+\label{sec:e3}
+\dy{(Lộc) Từ benchmark\_results.csv (benchmark\_type = scaling). Nhận xét: thời gian có tăng gần tuyến tính theo số bản ghi không; ở 100\% (32M dòng) hệ thống có chạy ổn định, không OOM; so sánh ngắn với việc nạp 32M dòng bằng Pandas nếu có đo.}
+
+\begin{figure}[H]
+\centering
+\figph{data_scalability.png}
+\vspace{5mm}
+\caption[E3: thời gian huấn luyện theo kích thước dữ liệu]{E3: thời gian huấn luyện ALS theo phần trăm dữ liệu MovieLens 32M.}
+\label{fig:e3_scaling}
+\end{figure}
+
+\section{E4: Speedup và Efficiency}
+\label{sec:e4}
+\dy{(Lộc) Từ benchmark\_results.csv (benchmark\_type = speedup): bảng $T_p$, $S_p$, $E_p$. Ước lượng tỉ lệ tuần tự $f$ theo Mục~\ref{sec:amdahl}. Giải thích vì sao $E_p < 1$: đọc Parquet, điều phối driver, shuffle giữa các vòng lặp ALS, checkpoint ghi đĩa.}
+
+\begin{table}[H]
+\centering
+\caption{Tăng tốc theo số nhân xử lý}
+\label{tab:e4}
+\begin{tabular}{c c c c}
+\toprule
+\textbf{Số nhân $p$} & \textbf{$T_p$ (s)} & \textbf{$S_p$} & \textbf{$E_p$} \\
+\midrule
+1 & \dy{--} & 1,00 & 1,00 \\
+2 & \dy{--} & \dy{--} & \dy{--} \\
+4 & \dy{--} & \dy{--} & \dy{--} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\figph{amdahl_speedup.png}
+\vspace{5mm}
+\caption[E4: Speedup theo số nhân]{E4: Speedup theo số nhân so với đường tuyến tính lý tưởng $S_p = p$.}
+\label{fig:e4_speedup}
+\end{figure}
+
+\section{Các yếu tố ảnh hưởng tới tính hợp lệ}
+\label{sec:hop_le}
+\begin{itemize}
+    \item \textbf{Một máy}: Spark chạy \texttt{local[*]} nên không có chi phí mạng giữa các nút; Speedup trên cụm thật có thể khác.
+    \item \textbf{Mỗi cấu hình đo một lần}: thời gian chịu ảnh hưởng của bộ nhớ đệm hệ điều hành và JIT của JVM; lần chạy đầu thường chậm hơn. \dy{(Lộc) Ghi rõ nếu đã chạy lặp và lấy trung bình.}
+    \item \textbf{Chia ngẫu nhiên theo lượt đánh giá}: khác với kịch bản thực tế là dự đoán tương lai từ quá khứ; chia theo thời gian sẽ cho độ đo thấp hơn.
+    \item \textbf{Ngưỡng liên quan \num{4,0}} là lựa chọn quy ước; thay đổi ngưỡng làm thay đổi giá trị tuyệt đối của Precision@K và \gls{ndcg}@K.
+\end{itemize}

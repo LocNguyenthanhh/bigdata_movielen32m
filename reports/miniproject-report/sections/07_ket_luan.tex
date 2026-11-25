@@ -1,0 +1,28 @@
+\chapter{Kết luận và hướng phát triển}
+\label{chap:ket_luan}
+
+\section{Kết quả so với mục tiêu}
+\label{sec:ket_qua}
+\begin{itemize}
+    \item \textbf{Lưu trữ và tiền xử lý phân tán}: pipeline \gls{etl} chuyển toàn bộ \num{32000204} bản ghi sang Parquet phân hoạch theo năm bằng PySpark. \dy{(Lộc) Bổ sung: thời gian ETL và tỉ lệ nén thực tế.}
+    \item \textbf{Lọc cộng tác và cold-start}: mô hình \gls{als} có checkpoint, tinh chỉnh siêu tham số trên tập kiểm định, sinh Top-20 phim chưa xem cho mỗi người dùng; người dùng mới nhận gợi ý theo Bayesian Popularity. \dy{(Tâm) Bổ sung RMSE và NDCG@10 so với baseline từ E2.}
+    \item \textbf{Đánh giá hiệu năng}: \dy{(Lộc) Tóm tắt E3 (mức tuyến tính của Data Scaling) và E4 (Speedup, Efficiency ở 4 nhân, tỉ lệ tuần tự ước lượng).}
+\end{itemize}
+
+\section{Hạn chế}
+\label{sec:han_che}
+\begin{itemize}
+    \item Thực nghiệm chạy trên một máy ở chế độ \texttt{local}, chưa đo trên cụm nhiều nút.
+    \item Mô hình chỉ dùng điểm đánh giá tường minh; chưa khai thác \texttt{tags.csv}, thể loại hay thời gian.
+    \item Gợi ý được tính theo lô; người dùng mới chỉ nhận danh sách phổ biến chung, chưa cá nhân hóa theo vài lượt đánh giá đầu tiên.
+    \item Tập kiểm thử chia ngẫu nhiên thay vì theo thời gian.
+\end{itemize}
+
+\section{Hướng phát triển}
+\label{sec:huong_phat_trien}
+\begin{itemize}
+    \item Chạy trên cụm Spark nhiều máy (Spark Standalone, YARN hoặc Databricks) để đo Speedup có chi phí mạng.
+    \item Dùng ALS phản hồi ngầm (\texttt{implicitPrefs}) hoặc kết hợp thể loại, thẻ để xây dựng mô hình lai.
+    \item Gợi ý cho người dùng mới theo cụm phim họ chọn (dựa trên kết quả K-Means), hoặc fold-in vector người dùng từ vài lượt đánh giá đầu tiên.
+    \item Chia tập kiểm thử theo thời gian và đánh giá thêm độ đa dạng, độ phủ danh mục của gợi ý.
+\end{itemize}

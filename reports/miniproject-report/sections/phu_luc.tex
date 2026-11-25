@@ -1,0 +1,48 @@
+\appendix
+\fancyfoot{}
+\fancyfoot[L]{\footnotesize Báo cáo Bài tập lớn -- CO5135}
+\fancyfoot[R]{\footnotesize Trang {\thepage}/\pageref{LastPage}}
+
+\chapter{Tái lập thực nghiệm}
+\label{app:tai_lap}
+\thispagestyle{fancy}
+Yêu cầu: Python 3.10 hoặc 3.11, Java 8/11/17 (Spark 3.5 không chạy trên Java 24 trở lên), RAM từ \SI{8}{GB} cho \texttt{dev} và từ \SI{16}{GB} cho \texttt{prod}. Trên Windows cần thêm \texttt{winutils.exe} trong \texttt{HADOOP\_HOME\textbackslash bin} để Spark ghi tệp; có thể dùng WSL hoặc Google Colab thay thế. \dy{(Lộc) Ghi commit/tag dùng cho kết quả trong báo cáo và thời gian chạy từng lệnh.}
+
+\begin{lstlisting}[language=bash, caption={Các lệnh tái lập E1--E4}, label={lst:tai_lap}]
+pip install -r requirements.txt
+
+# Kiểm tra nhanh trên mẫu 5%
+python run_pipeline.py --env dev
+
+# Toàn bộ 32M dòng: tuning (E1), đánh giá (E2), benchmark (E3, E4), K-Means
+python run_pipeline.py --env prod --with-tuning --with-benchmark --with-clustering
+
+# Hoặc chạy từng phần
+python -m src.ml.train_als --env prod --tune
+python -m src.ml.evaluate_model --env prod
+python -m src.benchmarks.benchmark_scaling
+python -m src.benchmarks.benchmark_speedup
+python -m src.benchmarks.plot_benchmarks
+streamlit run src/demo/app_demo.py
+\end{lstlisting}
+
+\chapter{Phân công công việc}
+\label{app:phan_cong}
+\thispagestyle{fancy}
+
+\begin{longtable}{p{0.24\textwidth}p{0.36\textwidth}>{\footnotesize\raggedright\arraybackslash}p{0.32\textwidth}}
+\caption{Phân công công việc trong nhóm}\label{tab:phan_cong}\\
+\toprule
+\textbf{Thành viên} & \textbf{Nhiệm vụ} & \textbf{Mã nguồn} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Thành viên} & \textbf{Nhiệm vụ} & \textbf{Mã nguồn} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+Nguyễn Đinh Nhật Quang (2470068) & Tải dữ liệu, ETL CSV sang Parquet, cấu hình Spark, phân tích khám phá dữ liệu & \texttt{src/etl/}, \texttt{src/common/}, \texttt{notebooks/}\allowbreak\texttt{01\_eda\_movielens.ipynb} \\
+Nguyễn Văn Tâm (2570358) & Huấn luyện và tinh chỉnh ALS, đánh giá RMSE/Precision@K/NDCG@K, cold-start, Top-N, phân cụm K-Means & \texttt{src/ml/}, \texttt{notebooks/}\allowbreak\texttt{02\_clustering\_bonus.ipynb} \\
+Nguyễn Thanh Lộc (2311958) & Đo Speedup và Data Scaling, vẽ biểu đồ, demo Streamlit, chủ trì báo cáo và slide & \texttt{src/benchmarks/}, \texttt{src/demo/}, \texttt{reports/}, \texttt{run\_pipeline.py} \\
+\end{longtable}

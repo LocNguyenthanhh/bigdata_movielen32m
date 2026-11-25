@@ -1,0 +1,209 @@
+\documentclass[a4paper, 12pt]{report}
+
+\usepackage{iftex}
+\ifPDFTeX
+    \usepackage[utf8]{vietnam,inputenc}
+    \usepackage[T5]{fontenc}
+    \DeclareTextSymbolDefault{\DH}{T1}
+\else
+    \usepackage{fontspec}
+    \usepackage[vietnamese]{babel}
+    \setmainfont{texgyretermes}[
+        Extension=.otf,
+        UprightFont=*-regular,
+        BoldFont=*-bold,
+        ItalicFont=*-italic,
+        BoldItalicFont=*-bolditalic
+    ]
+    \setsansfont{texgyreheros}[
+        Extension=.otf,
+        UprightFont=*-regular,
+        BoldFont=*-bold,
+        ItalicFont=*-italic,
+        BoldItalicFont=*-bolditalic
+    ]
+    \setmonofont{lmmono10}[
+        Extension=.otf,
+        UprightFont=*-regular,
+        BoldFont=*-regular,
+        ItalicFont=*-regular,
+        BoldItalicFont=*-regular
+    ]
+\fi
+
+\usepackage{geometry}
+% headheight before geometry so the body starts at top=25mm, as the template's second \thesislayout did.
+\setlength{\headheight}{40pt}
+\geometry{a4paper, left=30mm, right=20mm, top=25mm, bottom=20mm}
+\usepackage{setspace}
+\usepackage{etoolbox,ragged2e,indentfirst}
+\usepackage{amsmath,amssymb,amsfonts,amsthm,mathtools}
+\usepackage{array,tabularx,longtable,multirow,hhline,booktabs,float}
+\usepackage{graphicx}
+\graphicspath{{images/}{../figures/}}
+\usepackage{caption,subcaption}
+\usepackage[table,xcdraw,dvipsnames]{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{arrows,arrows.meta,backgrounds,positioning,shapes.geometric,fit,calc,decorations.pathreplacing}
+\usepackage[most]{tcolorbox}
+\usepackage{listings}
+\usepackage{enumitem}
+\usepackage{fancyhdr}
+\usepackage{lastpage}
+\usepackage{siunitx}
+\sisetup{output-decimal-marker={,}, group-separator={.}, mode=text}
+\usepackage{csquotes}
+\usepackage[unicode,breaklinks]{hyperref}
+\hypersetup{
+    urlcolor=blue,
+    linkcolor=black,
+    citecolor=blue,
+    colorlinks=true
+}
+\usepackage[acronym]{glossaries}
+\renewcommand{\acronymname}{Danh mục viết tắt}
+
+% Boxed display formula: \begin{ctbox}\begin{equation}...\end{equation}\end{ctbox}
+\newtcolorbox{ctbox}{enhanced, colback=blue!4!white, colframe=blue!40!black, boxrule=0.4pt, arc=2pt,
+  left=4pt, right=4pt, top=-4pt, bottom=2pt, before skip=6pt, after skip=6pt}
+
+\usepackage{algorithm}
+\usepackage[noend]{algpseudocode}
+\floatname{algorithm}{Giải thuật}
+\renewcommand{\listalgorithmname}{Danh sách giải thuật}
+\algrenewcommand\algorithmicrequire{\textbf{Đầu vào:}}
+\algrenewcommand\algorithmicensure{\textbf{Đầu ra:}}
+\algrenewcommand\algorithmicfor{\textbf{với}}
+\algrenewcommand\algorithmicdo{\textbf{làm}}
+
+\usepackage[
+    sorting=nyt,
+    backend=bibtex,
+    defernumbers=true,
+    natbib=true]{biblatex}
+\addbibresource{References/refs.bib}
+\makeatletter
+\def\blx@maxline{77}
+\makeatother
+
+\AtBeginDocument{\addtocontents{toc}{\protect\thispagestyle{empty}}}
+\AtBeginDocument{%
+  \renewcommand\lstlistlistingname{Danh sách lệnh}
+  \renewcommand\lstlistingname{Mã lệnh}
+}
+
+\patchcmd{\chapter}{plain}{fancy}{}{}
+\patchcmd{\part}{plain}{empty}{}{}
+
+\pagestyle{fancy}
+\fancyhead{}
+\fancyhead[L]{
+ \begin{tabular}{rl}
+    \begin{picture}(10,0)(0,8)
+    \includegraphics[width=8mm, height=8mm]{images/logoBK.jpg}
+   \end{picture}&
+	\begin{tabular}{l}
+		Đại học Quốc gia TP.HCM - Trường Đại Học Bách Khoa\\
+		Khoa Khoa học và Kỹ thuật Máy tính
+	\end{tabular}
+ \end{tabular}
+}
+\fancyfoot{}
+\fancyfoot[L]{\footnotesize Báo cáo Bài tập lớn -- CO5135}
+\fancyfoot[R]{\footnotesize Trang {\thepage}/\pageref{mylastpage}}
+\renewcommand{\headrulewidth}{0.3pt}
+\renewcommand{\footrulewidth}{0.3pt}
+
+\setcounter{secnumdepth}{4}
+
+\sloppy
+\captionsetup[figure]{labelfont={small,bf},textfont={small,it},belowskip=-1pt,aboveskip=-9pt}
+\captionsetup[table]{labelfont={small,bf},textfont={small,it},belowskip=-1pt,aboveskip=7pt}
+
+\setlength{\floatsep}{5pt plus 2pt minus 2pt}
+\setlength{\textfloatsep}{5pt plus 2pt minus 2pt}
+\setlength{\intextsep}{10pt plus 2pt minus 2pt}
+
+\definecolor{dkgreen}{rgb}{0,0.6,0}
+\definecolor{gray}{rgb}{0.5,0.5,0.5}
+\definecolor{mauve}{rgb}{0.58,0,0.82}
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.95,0.95,0.92}
+
+\lstset{
+    language=Python,
+    aboveskip=3mm,
+    belowskip=3mm,
+    columns=flexible,
+    backgroundcolor=\color{backcolour},
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{magenta},
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    basicstyle=\ttfamily\footnotesize,
+    breakatwhitespace=false,
+    breaklines=true,
+    captionpos=b,
+    keepspaces=true,
+    numbers=left,
+    numbersep=5pt,
+    showspaces=false,
+    showstringspaces=false,
+    showtabs=false,
+    tabsize=2
+}
+
+\makenoidxglossaries
+\input{Bibliocosas/glossary.tex}
+\setstretch{1.25}
+
+% Outline placeholder: grey italic note, removed once the section is written.
+\newcommand{\dy}[1]{{\color{gray}\itshape #1}}
+
+% Figure that may not exist yet (generated by the pipeline): draws a grey frame instead.
+% Usage: \figph[width]{file.png}
+\newcommand{\figph}[2][0.85\textwidth]{%
+  \IfFileExists{../figures/\detokenize{#2}}{\includegraphics[width=#1]{#2}}{%
+    \fbox{\parbox[c][4.5cm][c]{#1}{\centering\color{gray}\itshape
+      Chưa có hình \texttt{reports/figures/\detokenize{#2}}\par (sinh ra khi chạy pipeline)}}}}
+
+\begin{document}
+\glsunsetall % in text, acronyms print short; the list page has the long forms
+
+\input{Bibliocosas/titlepage}
+
+\pagestyle{fancy}
+\pagenumbering{roman}
+
+\input{sections/tom_tat}
+
+\tableofcontents
+\listoftables
+\listoffigures
+
+\glsaddall
+\printnoidxglossary[type=\acronymtype]
+
+\newpage
+\pagestyle{fancy}
+\pagenumbering{arabic}
+
+\input{sections/01_mo_dau}
+\input{sections/02_tong_quan}
+\input{sections/03_co_so_ly_thuyet}
+\input{sections/04_du_lieu_etl}
+\input{sections/05_mo_hinh_als}
+\input{sections/06_danh_gia}
+\input{sections/07_ket_luan}
+
+\DeclareNameAlias{sortname}{family-given}
+\DeclareNameAlias{default}{family-given}
+
+\addcontentsline{toc}{chapter}{Tài liệu tham khảo}
+\printbibliography[title={Tài liệu tham khảo}]
+\label{mylastpage}
+
+\input{sections/phu_luc}
+\end{document}

@@ -1,0 +1,91 @@
+\chapter{Mô hình gợi ý với Spark MLlib ALS}
+\label{chap:mo_hinh}
+
+Chương này trình bày khối (2) trong Hình~\ref{fig:kien_truc}, hiện thực trong thư mục \texttt{src/ml/}.
+
+\section{Chia dữ liệu}
+\label{sec:chia_du_lieu}
+Hàm \texttt{load\_and\_split\_ratings} đọc \texttt{data/lake/ratings/}, chỉ giữ bốn cột cần thiết, lấy mẫu theo \texttt{data.sample\_fraction} (\num{0,05} ở \texttt{dev}, \num{1,0} ở \texttt{prod}) rồi chia ngẫu nhiên \SI{80}{\percent} huấn luyện và \SI{20}{\percent} kiểm thử với \texttt{seed=42}. Việc chia ngẫu nhiên theo từng lượt đánh giá đảm bảo hầu hết người dùng có mặt ở cả hai tập; một số ít người dùng hoặc phim chỉ xuất hiện trong tập kiểm thử chính là các trường hợp cold-start được phân tích ở Mục~\ref{sec:cold_start}.
+
+\section{Huấn luyện ALS}
+\label{sec:huan_luyen}
+Hàm \texttt{build\_als} tạo estimator \texttt{pyspark.ml.recommendation.ALS} từ cấu hình (Bảng~\ref{tab:als_params}); \texttt{train\_als\_model} gọi \texttt{fit} và đo thời gian huấn luyện. Thời gian này cũng được khối HPC dùng lại để đo Speedup và Data Scaling.
+
+\begin{table}[H]
+\centering
+\caption{Tham số ALS theo môi trường}
+\label{tab:als_params}
+\begin{tabular}{l l c c}
+\toprule
+\textbf{Tham số} & \textbf{Ý nghĩa} & \texttt{dev} & \texttt{prod} \\
+\midrule
+\texttt{rank} & số chiều nhân tố $k$ & \num{10} & \num{20} \\
+\texttt{maxIter} & số vòng lặp luân phiên & \num{5} & \num{10} \\
+\texttt{regParam} & hệ số điều chuẩn $\lambda$ & \num{0,1} & \num{0,1} \\
+\texttt{checkpointInterval} & checkpoint sau mỗi $n$ vòng & \num{5} & \num{5} \\
+\texttt{nonnegative} & ràng buộc nhân tố không âm & \multicolumn{2}{c}{\texttt{True}} \\
+\texttt{coldStartStrategy} & xử lý dự đoán NaN & \multicolumn{2}{c}{\texttt{drop}} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Tinh chỉnh siêu tham số}
+\label{sec:tuning}
+Hàm \texttt{tune\_als\_hyperparameters} duyệt lưới \texttt{rank} $\in \{10, 20, 50\}$ và \texttt{regParam} $\in \{0{,}01;\ 0{,}1\}$ (ở \texttt{dev} chỉ dùng \texttt{rank} $\in \{10, 20\}$ để chạy nhanh). Để không rò rỉ thông tin của tập kiểm thử vào việc chọn mô hình, tập huấn luyện được chia tiếp thành \SI{90}{\percent} để huấn luyện và \SI{10}{\percent} làm tập kiểm định (validation). Mỗi cấu hình được đánh giá bằng \gls{rmse} trên tập kiểm định và ghi vào \texttt{tuning\_results.csv}; cấu hình có \gls{rmse} nhỏ nhất được dùng để huấn luyện mô hình cuối trên toàn bộ tập huấn luyện. Bước này bật bằng cờ \texttt{--with-tuning}.
+
+\section{Sinh gợi ý Top-N}
+\label{sec:topn}
+\texttt{generate\_topn\_recommendations} dùng \texttt{recommendForAllUsers} để lấy các phim có điểm dự đoán cao nhất cho mỗi người dùng, loại phim đã xem bằng phép kết \texttt{left\_anti}, rồi đánh số thứ tự bằng hàm cửa sổ và giữ $N = 20$ phim đầu (Mã lệnh~\ref{lst:topn}). Phép kết \texttt{left\_anti} giữ lại các dòng bên trái \emph{không} có cặp tương ứng bên phải và được Spark thực thi phân tán như một phép kết thông thường, không phải thu dữ liệu về driver.
+
+\textbf{Lọc phim ít lượt đánh giá.} \gls{als} được huấn luyện để cực tiểu sai số điểm~\eqref{eq:als_loss}, không phải để xếp hạng. Phim chỉ có vài lượt đánh giá có vector nhân tố ít bị ràng buộc, nên điểm dự đoán của chúng dễ cao bất thường và chiếm đầu danh sách Top-N, dù người dùng hầu như không biết tới các phim này. Thí nghiệm E2 (Mục~\ref{sec:e2}) cho thấy rõ hiện tượng này. Vì vậy hệ thống chỉ giữ ứng viên là phim có số lượt đánh giá trên tập huấn luyện không nhỏ hơn phân vị \texttt{als.candidate\_min\_ratings\_quantile} (mặc định \num{0,9}, cùng ngưỡng $m$ của Bayesian Popularity ở Mục~\ref{sec:bayes}). Do phần lớn ứng viên đầu bảng bị loại, hàm lấy dư $N + 1000$ ứng viên trước khi lọc; đặt tham số về \num{0} thì tắt bộ lọc và chỉ lấy $N + 100$ ứng viên.
+
+\begin{lstlisting}[caption={Loại phim đã xem và giữ Top-N}, label={lst:topn}]
+watched_df = ratings_df.select("user_id", "movie_id").distinct()
+unwatched = exploded_recs.join(watched_df, on=["user_id", "movie_id"], how="left_anti")
+w = Window.partitionBy("user_id").orderBy(F.col("score").desc(), F.col("movie_id"))
+topn_df = unwatched.withColumn("rank", F.row_number().over(w)).filter(F.col("rank") <= top_n)
+\end{lstlisting}
+
+\section{Xử lý cold-start}
+\label{sec:cold_start}
+Mô-đun \texttt{src/ml/cold\_start.py} tính bảng xếp hạng phim theo công thức~\eqref{eq:bayes} trên tập huấn luyện và lưu ra \texttt{popular\_movies.parquet}. Khi tra cứu một mã người dùng không có trong bảng Top-N, giao diện demo hiển thị danh sách này thay cho gợi ý cá nhân hóa. Hàm \texttt{recommend\_for\_new\_user} còn cho phép loại các phim người dùng mới đã khai báo là đã xem.
+
+Ngoài ra, hàm \texttt{analyze\_cold\_start} đo mức độ phổ biến của cold-start trong dữ liệu: số dòng kiểm thử có người dùng hoặc phim chưa xuất hiện trong tập huấn luyện, số người dùng mới, và \gls{rmse} trên các dòng này khi dự đoán bằng điểm Bayes của phim (hoặc trung bình chung nếu phim cũng mới).
+
+\section{Quy trình đánh giá xếp hạng}
+\label{sec:eval_protocol}
+Giải thuật~\ref{alg:ranking} mô tả cách \texttt{evaluate\_als\_model} tính Precision@K và \gls{ndcg}@K bằng \texttt{RankingEvaluator} của Spark MLlib. Ba phương pháp được so sánh trên cùng tập người dùng và cùng tập phim liên quan:
+\begin{itemize}
+    \item \textbf{ALS thô}: Top-K từ $\max K + 100$ ứng viên của \gls{als}, không lọc.
+    \item \textbf{ALS có lọc}: Top-K sau khi chỉ giữ phim đủ lượt đánh giá (Mục~\ref{sec:topn}).
+    \item \textbf{Bayesian Popularity}: mọi người dùng nhận cùng một danh sách phim có điểm~\eqref{eq:bayes} cao nhất, không cá nhân hóa.
+\end{itemize}
+Việc lấy $\max K + 1000$ ứng viên cho mỗi người dùng rất tốn kém trên toàn bộ \num{200000} người dùng, nên các độ đo xếp hạng được tính trên một mẫu cố định khoảng \num{20000} người dùng (tham số \texttt{evaluation.ranking\_user\_sample}, \texttt{seed=42}). \gls{rmse} vẫn được tính trên toàn bộ tập kiểm thử.
+
+\begin{algorithm}[H]
+\caption{Đánh giá xếp hạng Top-K}
+\label{alg:ranking}
+\begin{algorithmic}[1]
+\Require mô hình ALS, tập huấn luyện $\mathcal{D}_{tr}$, tập kiểm thử $\mathcal{D}_{te}$, danh sách $K$, ngưỡng $\tau = 4{,}0$
+\Ensure Precision@K, NDCG@K
+\State $G_u \gets \{ i : (u,i,r) \in \mathcal{D}_{te},\ r \ge \tau \}$ cho mỗi người dùng $u$
+\State $\mathcal{U} \gets$ mẫu cố định từ $\{ u : G_u \neq \emptyset \}$
+\State $C_u \gets$ \texttt{recommendForUserSubset}$(\mathcal{U}, \max K + 1000)$
+\State (ALS có lọc) $C_u \gets \{ i \in C_u : n_i \ge m \}$ \Comment{$n_i$: số lượt đánh giá trên $\mathcal{D}_{tr}$}
+\State $C_u \gets C_u \setminus \{ i : (u,i) \in \mathcal{D}_{tr} \}$ \Comment{\texttt{left\_anti}}
+\State $L_u \gets$ $\max K$ phim đầu của $C_u$ theo điểm giảm dần
+\For{$K$ trong danh sách}
+  \State tính Precision@K, NDCG@K trên các cặp $(L_u, G_u)$ theo~\eqref{eq:precision}, \eqref{eq:ndcg}
+\EndFor
+\end{algorithmic}
+\end{algorithm}
+
+Toàn bộ kết quả (siêu tham số, thời gian huấn luyện, \gls{rmse}, độ đo xếp hạng của ALS và baseline, thống kê cold-start) được ghi vào \texttt{data/output/metrics.json}.
+
+\section{Mở rộng: phân cụm phim trên itemFactors}
+\label{sec:clustering}
+Mô-đun \texttt{src/ml/clustering.py} và notebook \texttt{02\_clustering\_bonus.ipynb} lấy ma trận \texttt{itemFactors} của mô hình, chuyển mỗi dòng thành vector bằng \texttt{array\_to\_vector}, và chỉ giữ phim có ít nhất \num{20} lượt đánh giá vì vector của phim quá ít dữ liệu rất nhiễu. K-Means được chạy với $k \in \{5, 8, 10, 12, 15\}$ để chọn $k$ theo Silhouette và \gls{wssse} (Mục~\ref{sec:kmeans}). Sau khi phân cụm, mỗi cụm được diễn giải bằng các thể loại chiếm tỉ lệ cao nhất và các phim có nhiều lượt đánh giá nhất. K-Means không dùng thông tin thể loại; nếu các cụm vẫn trùng với thể loại thì đó là bằng chứng vector tiềm ẩn của \gls{als} học được ngữ nghĩa nội dung chỉ từ hành vi chấm điểm.
+
+\section{Kiểm thử trên dữ liệu tổng hợp}
+\label{sec:smoke}
+Trước khi chạy trên dữ liệu thật, toàn bộ khối mô hình được kiểm thử trên một tập tổng hợp nhỏ: \num{400} người dùng chia thành \num{4} nhóm sở thích, \num{200} phim thuộc \num{4} thể loại, mỗi người dùng chấm \num{40} phim (điểm cao với phim cùng nhóm), cùng \num{10} người dùng chỉ có trong tập kiểm thử. Kết quả cho thấy pipeline chạy đúng: \gls{als} đạt \gls{ndcg}@10 bằng \num{0,131} so với \num{0,027} của baseline phổ biến; phân tích cold-start phát hiện đúng \num{10} người dùng mới; K-Means với $k=4$ tách đúng bốn nhóm thể loại (Silhouette \num{0,92}). Các con số này chỉ dùng để kiểm tra tính đúng của mã, không phản ánh chất lượng trên MovieLens.

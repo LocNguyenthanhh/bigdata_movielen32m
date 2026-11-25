@@ -1,0 +1,54 @@
+% Sơ đồ pipeline thực tế của dự án (dùng chung cho báo cáo và slide).
+% Cần: \usetikzlibrary{arrows.meta,positioning,fit,backgrounds}
+\begin{tikzpicture}[
+    font=\sffamily\scriptsize,
+    node distance=5mm and 7mm,
+    box/.style={draw=blue!55!black, fill=blue!6, rounded corners=2pt, align=center,
+                minimum height=11mm, text width=25mm, inner sep=2pt},
+    store/.style={box, draw=orange!70!black, fill=orange!10},
+    outbox/.style={box, draw=green!45!black, fill=green!8},
+    arr/.style={-{Stealth[length=2mm]}, thick, gray!70!black},
+    grp/.style={draw=gray!60, dashed, rounded corners=4pt, inner sep=2.5mm},
+    lbl/.style={font=\sffamily\scriptsize\bfseries, text=gray!50!black, anchor=south west,
+                inner sep=1pt}
+  ]
+  % (1) ETL, hàng trên
+  \node[store] (csv) {MovieLens 32M\\CSV $\sim$1.0 GB\\\texttt{data/raw/}};
+  \node[box, right=of csv] (etl) {PySpark ETL\\schema tường minh\\Kryo + AQE};
+  \node[store, right=of etl] (lake) {Parquet Data Lake\\snappy, phân hoạch\\theo \texttt{year}};
+
+  % (3) HPC, hàng trên bên phải
+  \node[box, right=12mm of lake] (bench) {HPC Benchmark\\cores 1 / 2 / 4\\dữ liệu 5--100\%};
+  \node[outbox, right=of bench] (plots) {\texttt{benchmark\_}\\\texttt{results.csv}\\biểu đồ Speedup};
+
+  % (2) Mô hình, hai hàng dưới
+  \node[box, below=13mm of lake] (als) {Spark MLlib ALS\\tuning\\checkpoint};
+  \node[box, left=of als] (eval) {Đánh giá\\RMSE, P@K, NDCG@K\\cold-start};
+  \node[box, right=12mm of als] (topn) {Top-N\\lọc \texttt{left\_anti}};
+  \node[outbox, right=of topn] (demo) {Demo Streamlit\\tra cứu\\theo User ID};
+  \node[outbox, below=of eval] (metrics) {\texttt{metrics.json}\\\texttt{tuning\_}\\\texttt{results.csv}};
+  \node[box, below=of als] (pop) {Bayesian\\Popularity\\(cold-start)};
+  \node[box, below=of topn] (km) {K-Means\\trên itemFactors\\(mở rộng)};
+
+  \draw[arr] (csv) -- (etl);
+  \draw[arr] (etl) -- (lake);
+  \draw[arr] (lake) -- (bench);
+  \draw[arr] (bench) -- (plots);
+  \draw[arr] (lake) -- (als);
+  \draw[arr] (als) -- (eval);
+  \draw[arr] (als) -- (topn);
+  \draw[arr] (als) -- (pop);
+  \draw[arr] (als.south east) -- (km.north west);
+  \draw[arr] (eval) -- (metrics);
+  \draw[arr] (topn) -- (demo);
+  \draw[arr] (pop.south) -- ++(0,-3mm) -| (demo.south);
+
+  \begin{scope}[on background layer]
+    \node[grp, fit=(csv)(etl)(lake)] (g1) {};
+    \node[grp, fit=(bench)(plots)] (g3) {};
+    \node[grp, fit=(eval)(als)(topn)(pop)(km)(metrics)(demo)] (g2) {};
+  \end{scope}
+  \node[lbl] at (g1.north west) {(1) Lưu trữ \& tiền xử lý phân tán};
+  \node[lbl] at (g3.north west) {(3) Đánh giá hiệu năng};
+  \node[lbl] at (g2.north west) {(2) Mô hình gợi ý};
+\end{tikzpicture}

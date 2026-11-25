@@ -1,0 +1,20 @@
+\chapter{Tổng quan và các công trình liên quan}
+\label{chap:tong_quan}
+
+\section{Hệ thống gợi ý}
+\label{sec:he_goi_y}
+Hệ thống gợi ý thường chia thành ba nhóm. \textbf{Gợi ý dựa trên nội dung} (content-based) so khớp thuộc tính sản phẩm (thể loại, diễn viên) với hồ sơ sở thích của người dùng. \textbf{Lọc cộng tác} (\gls{cf}) chỉ dựa vào lịch sử tương tác: người dùng có hành vi giống nhau thì sẽ thích những sản phẩm giống nhau. \textbf{Phương pháp lai} kết hợp hai hướng trên. Lọc cộng tác không cần mô tả nội dung sản phẩm và thường cho chất lượng tốt khi có nhiều dữ liệu tương tác, nhưng gặp khó với người dùng hoặc sản phẩm mới chưa có lịch sử, gọi là bài toán \textbf{khởi đầu lạnh} (cold-start)~\cite{schein2002coldstart}.
+
+Trong lọc cộng tác, nhóm phương pháp \textbf{phân rã ma trận} (matrix factorization) trở nên phổ biến sau cuộc thi Netflix Prize~\cite{koren2009matrix}: ma trận điểm người dùng--sản phẩm được xấp xỉ bằng tích của hai ma trận nhân tố có số chiều nhỏ. \gls{als}~\cite{zhou2008als} là một cách giải bài toán này phù hợp với tính toán song song, và là thuật toán lọc cộng tác có sẵn trong Spark MLlib.
+
+\section{Xử lý dữ liệu lớn với Apache Spark}
+\label{sec:spark}
+Apache Spark xây dựng trên trừu tượng \gls{rdd}~\cite{zaharia2012rdd}: tập dữ liệu được chia thành nhiều phân vùng (partition) xử lý song song, mỗi phép biến đổi được ghi lại thành đồ thị phụ thuộc (lineage) dạng \gls{dag} để tính lại khi mất dữ liệu thay vì sao chép. Spark SQL và DataFrame~\cite{armbrust2015sparksql} bổ sung lược đồ (schema) và bộ tối ưu Catalyst; từ Spark 3.0, \gls{aqe} còn điều chỉnh kế hoạch thực thi trong lúc chạy (gộp phân vùng nhỏ, xử lý lệch dữ liệu). So với Hadoop MapReduce, Spark giữ dữ liệu trung gian trong bộ nhớ nên phù hợp với các thuật toán lặp như \gls{als}.
+
+\section{Định dạng lưu trữ cột Apache Parquet}
+\label{sec:parquet}
+Parquet~\cite{parquet} lưu dữ liệu theo cột, nén từng cột (ví dụ \texttt{snappy}) và ghi thống kê min/max cho từng khối. Nhờ vậy truy vấn chỉ đọc các cột cần thiết (column pruning) và bỏ qua các khối không thỏa điều kiện (predicate pushdown). Kết hợp với phân hoạch thư mục (\texttt{partitionBy}), Spark có thể bỏ qua cả thư mục không liên quan (partition pruning). So với \gls{csv}, Parquet nhỏ hơn, có kiểu dữ liệu tường minh và không phải phân tích cú pháp văn bản mỗi lần đọc.
+
+\section{Các công trình liên quan}
+\label{sec:lien_quan}
+Bộ dữ liệu MovieLens do GroupLens công bố từ năm 1998 và trở thành chuẩn so sánh phổ biến nhất cho hệ thống gợi ý~\cite{harper2015movielens}. Zhou và cộng sự~\cite{zhou2008als} đề xuất ALS với điều chuẩn có trọng số và song song hóa trên cụm cho Netflix Prize. Spark MLlib~\cite{meng2016mllib} hiện thực ALS dạng khối (block ALS), chia người dùng và sản phẩm thành các khối để giảm lượng dữ liệu trao đổi giữa các nút. Đề tài này dùng hiện thực ALS của MLlib, tập trung vào việc xây dựng pipeline dữ liệu lớn hoàn chỉnh và đo đạc hiệu năng phân tán, thay vì đề xuất thuật toán mới.
