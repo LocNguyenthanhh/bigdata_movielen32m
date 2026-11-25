@@ -15,6 +15,7 @@ paths:
   tags_parquet: "data/lake/tags"
   output_dir: "data/output"
   topn_parquet: "data/output/topn_recommendations.parquet"
+  popular_parquet: "data/output/popular_movies.parquet"
   metrics_json: "data/output/metrics.json"
   benchmark_csv: "data/output/benchmark_results.csv"
   checkpoint_dir: "data/checkpoints"
@@ -32,6 +33,11 @@ als:
   nonnegative: true
   checkpoint_interval: 5
   top_n: 20
+
+cold_start:
+  # Gợi ý dự phòng cho user mới bằng Bayesian Popularity (Weighted Rating)
+  # m = phân vị số lượt đánh giá mỗi phim, dùng làm prior
+  min_votes_quantile: 0.90
 
 evaluation:
   k_values: [10, 20]
